@@ -27,7 +27,11 @@ return Application::configure(basePath: dirname(__DIR__))
             'not_tenant' => \Spatie\Multitenancy\Http\Middleware\PreventAccessFromCentralDomains::class,
         ]);
     })
-
+    ->withProviders([
+        // This is now in the correct place
+        Spatie\Multitenancy\MultitenancyServiceProvider::class,
+    ])
     ->withExceptions(function (Exceptions $exceptions) {
         //
     })->create();
+

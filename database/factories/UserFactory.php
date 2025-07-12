@@ -2,43 +2,34 @@
 
 namespace Database\Factories;
 
+use App\Models\User;
+use App\Models\Company;
 use Illuminate\Database\Eloquent\Factories\Factory;
-use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Str;
+use Spatie\Permission\Models\Role; // <-- Import the Role model
 
-/**
- * @extends \Illuminate\Database\Eloquent\Factories\Factory<\App\Models\User>
- */
 class UserFactory extends Factory
 {
-    /**
-     * The current password being used by the factory.
-     */
-    protected static ?string $password;
+    protected $model = User::class;
 
-    /**
-     * Define the model's default state.
-     *
-     * @return array<string, mixed>
-     */
-    public function definition(): array
+    public function definition()
     {
+        // Find or create a default role for the tenant.
+        // The 'team_id' is crucial for Spatie's multi-tenancy permission setup.
+        $role = Role::firstOrCreate(
+            ['name' => 'Admin'],
+            ['team_id' => $this->faker->numberBetween(1, 100)] // Using a placeholder team_id
+        );
+
         return [
-            'name' => fake()->name(),
-            'email' => fake()->unique()->safeEmail(),
+            'first_name' => $this->faker->firstName,
+            'last_name' => $this->faker->lastName,
+            'email' => $this->faker->unique()->safeEmail,
+            'company_id' => Company::factory(),
+            'role_id' => $role->id, // <-- Assign the role_id here
+            'status' => 'active',
+            'user_type' => $this->faker->randomElement(['system_admin', 'hod', 'booking_agent']),
+            'auth_method' => 'otp',
             'email_verified_at' => now(),
-            'password' => static::$password ??= Hash::make('password'),
-            'remember_token' => Str::random(10),
         ];
-    }
-
-    /**
-     * Indicate that the model's email address should be unverified.
-     */
-    public function unverified(): static
-    {
-        return $this->state(fn (array $attributes) => [
-            'email_verified_at' => null,
-        ]);
     }
 }

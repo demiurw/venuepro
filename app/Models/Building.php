@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 
 namespace App\Models;
 
@@ -9,6 +9,8 @@ use App\Traits\BelongsToTenant;
 class Building extends Model
 {
     use HasFactory, BelongsToTenant;
+    protected $table = 'building';
+
 
     protected $fillable = [
         'name',
