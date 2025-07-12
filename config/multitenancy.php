@@ -19,7 +19,14 @@ return [
      * This class should extend `Spatie\Multitenancy\TenantFinder\TenantFinder`
      *
      */
-    'tenant_finder' => null,
+    /*
+ * These finders are responsible for finding a tenant for the current request.
+ *
+ * A valid tenant finder is any class that implements \Spatie\Multitenancy\TenantFinder\TenantFinder
+ */
+    'tenant_finders' => [
+        \Spatie\Multitenancy\TenantFinder\DomainTenantFinder::class,
+    ],
 
     /*
      * These fields are used by tenant:artisan command to match one or more tenant.
@@ -33,10 +40,13 @@ return [
      *
      * A valid task is any class that implements Spatie\Multitenancy\Tasks\SwitchTenantTask
      */
+    /*
+ * These tasks will be performed when switching tenants.
+ *
+ * A valid task is any class that implements \Spatie\Multitenancy\Tasks\SwitchTenantTask
+ */
     'switch_tenant_tasks' => [
-        // \Spatie\Multitenancy\Tasks\PrefixCacheTask::class,
-        // \Spatie\Multitenancy\Tasks\SwitchTenantDatabaseTask::class,
-        // \Spatie\Multitenancy\Tasks\SwitchRouteCacheTask::class,
+        \Spatie\Multitenancy\Tasks\SwitchTenantDatabaseTask::class,
     ],
 
     /*
@@ -45,7 +55,7 @@ return [
      * It must  extend `Spatie\Multitenancy\Models\Tenant::class` or
      * implement `Spatie\Multitenancy\Contracts\IsTenant::class` interface
      */
-    'tenant_model' => Tenant::class,
+    'tenant_model' => App\Models\Company::class,
 
     /*
      * If there is a current tenant when dispatching a job, the id of the current tenant

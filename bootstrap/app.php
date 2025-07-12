@@ -21,7 +21,13 @@ return Application::configure(basePath: dirname(__DIR__))
             HandleInertiaRequests::class,
             AddLinkHeadersForPreloadedAssets::class,
         ]);
+
+        $middleware->alias([
+            'tenant' => \Spatie\Multitenancy\Http\Middleware\NeedsTenant::class,
+            'not_tenant' => \Spatie\Multitenancy\Http\Middleware\PreventAccessFromCentralDomains::class,
+        ]);
     })
+
     ->withExceptions(function (Exceptions $exceptions) {
         //
     })->create();
