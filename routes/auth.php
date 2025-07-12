@@ -8,6 +8,7 @@ use App\Http\Controllers\Auth\NewPasswordController;
 use App\Http\Controllers\Auth\PasswordResetLinkController;
 use App\Http\Controllers\Auth\RegisteredUserController;
 use App\Http\Controllers\Auth\VerifyEmailController;
+use App\Http\Controllers\Auth\OtpController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware('guest')->group(function () {
@@ -20,6 +21,31 @@ Route::middleware('guest')->group(function () {
         ->name('login');
 
     Route::post('login', [AuthenticatedSessionController::class, 'store']);
+
+    // OTP Authentication Routes
+    Route::get('otp', [OtpController::class, 'create'])
+        ->name('otp.create');
+
+    Route::post('otp/generate', [OtpController::class, 'generate'])
+        ->name('otp.generate')
+        ->middleware('throttle:3,1'); // Max 3 attempts per minute
+
+    Route::post('otp/verify', [OtpController::class, 'verify'])
+        ->name('otp.verify')
+        ->middleware('throttle:5,1'); // Max 5 verification attempts per minute
+
+    Route::post('otp/resend', [OtpController::class, 'resend'])
+        ->name('otp.resend')
+        ->middleware('throttle:2,1'); // Max 2 resend attempts per minute
+
+    // Account Verification Routes (for new users)
+    Route::post('verify-account/generate', [OtpController::class, 'generateForVerification'])
+        ->name('verification.generate')
+        ->middleware('throttle:3,1');
+
+    Route::post('verify-account/verify', [OtpController::class, 'verifyForActivation'])
+        ->name('verification.verify.otp')
+        ->middleware('throttle:5,1');
 
     Route::get('forgot-password', [PasswordResetLinkController::class, 'create'])
         ->name('password.request');

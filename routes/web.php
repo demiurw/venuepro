@@ -2,6 +2,7 @@
 
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\DashboardController;
+use Inertia\Inertia;
 
 /*
 |--------------------------------------------------------------------------
@@ -14,7 +15,7 @@ use App\Http\Controllers\DashboardController;
 |
 */
 Route::get('/', function () {
-    return view('welcome');
+    return Inertia::render('Welcome');  // ✅ Fixed: Use Inertia::render instead of view()
 });
 
 
