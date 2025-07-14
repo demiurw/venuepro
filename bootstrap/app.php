@@ -24,8 +24,7 @@ return Application::configure(basePath: dirname(__DIR__))
 
         $middleware->alias([
             'tenant' => \Spatie\Multitenancy\Http\Middleware\NeedsTenant::class,
-            'not_tenant' => \Spatie\Multitenancy\Http\Middleware\PreventAccessFromCentralDomains::class,
-        ]);
+  ]);
     })
     ->withProviders([
         // This is now in the correct place

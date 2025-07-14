@@ -27,7 +27,7 @@ class OtpController extends Controller
      */
     public function create(Request $request): Response
     {
-        return Inertia::render('Auth/Otp', [
+        return Inertia::render('auth/Otp', [
             'email' => $request->old('email'),
             'step' => 'request', // 'request' or 'verify'
             'status' => session('status'),

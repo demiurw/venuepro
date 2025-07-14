@@ -18,7 +18,7 @@ class CreateUsersTable extends Migration
             $table->foreignId('company_id')->nullable()->constrained()->onDelete('cascade');
             $table->enum('status', ['active', 'inactive', 'pending'])->default('pending');
             $table->enum('user_type', ['venuepro_admin', 'system_admin', 'hod', 'booking_agent', 'invitee', 'external'])->default('invitee');
-            $table->enum('auth_method', ['password', 'otp', 'oauth'])->default('otp');
+            $table->enum('auth_method', ['otp', 'oauth'])->default('otp'); // Removed 'password' option
             $table->string('email_verification_token', 100)->nullable();
             $table->timestamp('email_verified_at')->nullable();
             $table->string('otp_secret')->nullable();

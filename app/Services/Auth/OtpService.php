@@ -4,6 +4,7 @@ namespace App\Services\Auth;
 
 use App\Models\User;
 use App\Models\OtpAttempt;
+use App\Mail\OtpMail;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
@@ -18,8 +19,19 @@ class OtpService
     public function generateOtp(User $user, string $purpose = 'login'): array
     {
         try {
+            Log::info('OTP generation started', [
+                'user_id' => $user->id,
+                'email' => $user->email,
+                'purpose' => $purpose
+            ]);
+
             // Check rate limiting
             if ($this->isRateLimited($user)) {
+                Log::warning('OTP generation rate limited', [
+                    'user_id' => $user->id,
+                    'email' => $user->email
+                ]);
+
                 return [
                     'success' => false,
                     'message' => 'Please wait before requesting another OTP.',
@@ -33,6 +45,13 @@ class OtpService
             // Generate new OTP code
             $otpCode = $this->generateOtpCode();
 
+            Log::info('OTP code generated', [
+                'user_id' => $user->id,
+                'email' => $user->email,
+                'otp_code' => $otpCode, // REMOVE THIS IN PRODUCTION!
+                'purpose' => $purpose
+            ]);
+
             // Create OTP attempt record
             $otpAttempt = OtpAttempt::create([
                 'company_id' => $user->company_id,
@@ -43,10 +62,16 @@ class OtpService
                 'attempt_count' => 0,
             ]);
 
+            Log::info('OTP attempt record created', [
+                'user_id' => $user->id,
+                'otp_attempt_id' => $otpAttempt->id,
+                'expires_at' => $otpAttempt->expires_at
+            ]);
+
             // Send OTP via email
             $this->sendOtpEmail($user, $otpCode, $purpose);
 
-            Log::info('OTP generated for user', [
+            Log::info('OTP generation completed successfully', [
                 'user_id' => $user->id,
                 'email' => $user->email,
                 'purpose' => $purpose,
@@ -57,13 +82,16 @@ class OtpService
                 'success' => true,
                 'message' => 'OTP sent to your email address.',
                 'expires_at' => $otpAttempt->expires_at,
-                'otp_id' => $otpAttempt->id
+                'otp_id' => $otpAttempt->id,
+                'debug_otp' => config('app.debug') ? $otpCode : null // Only in debug mode
             ];
 
         } catch (\Exception $e) {
             Log::error('Failed to generate OTP', [
                 'user_id' => $user->id,
-                'error' => $e->getMessage()
+                'email' => $user->email,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
             ]);
 
             return [
@@ -76,41 +104,83 @@ class OtpService
     public function verifyOtp(User $user, string $otpCode): array
     {
         try {
+            Log::info('OTP verification started', [
+                'user_id' => $user->id,
+                'email' => $user->email,
+                'provided_otp' => $otpCode
+            ]);
+
             // Find the most recent active OTP attempt
-            $otpAttempt = $user->activeOtpAttempts()
-                ->where('otp_code', $otpCode)
+            $otpAttempt = $user->otpAttempts()
+                ->where('is_used', false)
+                ->where('expires_at', '>', now())
                 ->orderBy('created_at', 'desc')
                 ->first();
 
             if (!$otpAttempt) {
-                // Check if there's an active OTP to increment attempts
-                $activeOtp = $user->activeOtpAttempts()
+                Log::warning('No active OTP found for verification', [
+                    'user_id' => $user->id,
+                    'email' => $user->email,
+                    'provided_otp' => $otpCode
+                ]);
+
+                // Check if there's an expired OTP to give better error message
+                $expiredOtp = $user->otpAttempts()
+                    ->where('expires_at', '<=', now())
                     ->orderBy('created_at', 'desc')
                     ->first();
 
-                if ($activeOtp) {
-                    $activeOtp->incrementAttempt();
+                if ($expiredOtp) {
+                    return [
+                        'success' => false,
+                        'message' => 'OTP has expired. Please request a new one.',
+                        'expired' => true
+                    ];
+                }
 
-                    if ($activeOtp->hasExceededMaxAttempts($this->maxAttempts)) {
-                        $activeOtp->markAsUsed(); // Invalidate after max attempts
+                return [
+                    'success' => false,
+                    'message' => 'No valid OTP found. Please request a new one.',
+                ];
+            }
 
-                        return [
-                            'success' => false,
-                            'message' => 'Maximum attempts exceeded. Please request a new OTP.',
-                            'max_attempts_exceeded' => true
-                        ];
-                    }
+            // Check if OTP code matches
+            if ($otpAttempt->otp_code !== $otpCode) {
+                Log::warning('OTP code mismatch', [
+                    'user_id' => $user->id,
+                    'email' => $user->email,
+                    'expected_otp' => $otpAttempt->otp_code,
+                    'provided_otp' => $otpCode,
+                    'attempt_count' => $otpAttempt->attempt_count
+                ]);
+
+                $otpAttempt->incrementAttempt();
+
+                if ($otpAttempt->hasExceededMaxAttempts($this->maxAttempts)) {
+                    $otpAttempt->markAsUsed(); // Invalidate after max attempts
+
+                    return [
+                        'success' => false,
+                        'message' => 'Maximum attempts exceeded. Please request a new OTP.',
+                        'max_attempts_exceeded' => true
+                    ];
                 }
 
                 return [
                     'success' => false,
                     'message' => 'Invalid OTP code.',
-                    'attempts_remaining' => $this->maxAttempts - ($activeOtp->attempt_count ?? 0)
+                    'attempts_remaining' => $this->maxAttempts - $otpAttempt->attempt_count
                 ];
             }
 
             // Check if OTP is expired
             if ($otpAttempt->isExpired()) {
+                Log::warning('OTP verification attempted with expired code', [
+                    'user_id' => $user->id,
+                    'email' => $user->email,
+                    'expired_at' => $otpAttempt->expires_at
+                ]);
+
                 return [
                     'success' => false,
                     'message' => 'OTP has expired. Please request a new one.',
@@ -118,24 +188,10 @@ class OtpService
                 ];
             }
 
-            // Check if max attempts exceeded
-            if ($otpAttempt->hasExceededMaxAttempts($this->maxAttempts)) {
-                $otpAttempt->markAsUsed();
-
-                return [
-                    'success' => false,
-                    'message' => 'Maximum attempts exceeded. Please request a new OTP.',
-                    'max_attempts_exceeded' => true
-                ];
-            }
-
-            // Mark OTP as used
+            // OTP verification successful
             $otpAttempt->markAsUsed();
 
-            // Update user's last login time
-            $user->update(['last_login_at' => now()]);
-
-            Log::info('OTP verified successfully', [
+            Log::info('OTP verification successful', [
                 'user_id' => $user->id,
                 'email' => $user->email,
                 'otp_attempt_id' => $otpAttempt->id
@@ -144,18 +200,20 @@ class OtpService
             return [
                 'success' => true,
                 'message' => 'OTP verified successfully.',
-                'user' => $user
             ];
 
         } catch (\Exception $e) {
-            Log::error('Failed to verify OTP', [
+            Log::error('OTP verification failed', [
                 'user_id' => $user->id,
-                'error' => $e->getMessage()
+                'email' => $user->email,
+                'provided_otp' => $otpCode,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
             ]);
 
             return [
                 'success' => false,
-                'message' => 'Failed to verify OTP. Please try again.'
+                'message' => 'OTP verification failed. Please try again.'
             ];
         }
     }
@@ -163,30 +221,35 @@ class OtpService
     public function verifyUserAndGenerateOtp(string $email, string $purpose = 'login'): array
     {
         try {
-            // Find user by email
+            Log::info('User verification and OTP generation started', [
+                'email' => $email,
+                'purpose' => $purpose
+            ]);
+
             $user = User::where('email', $email)->first();
 
             if (!$user) {
+                Log::warning('OTP generation attempted for non-existent user', [
+                    'email' => $email
+                ]);
+
                 return [
                     'success' => false,
-                    'message' => 'No account found with this email address.',
-                    'user_not_found' => true
+                    'message' => 'No account found with this email address.'
                 ];
             }
 
-            // Check if user can receive OTP
-            if (!$user->isOtpUser()) {
-                return [
-                    'success' => false,
-                    'message' => 'This account is not configured for OTP authentication.',
-                    'invalid_auth_method' => true
-                ];
-            }
+            // Check if user account is active
+            if ($user->status !== 'active') {
+                Log::warning('OTP generation attempted for inactive user', [
+                    'user_id' => $user->id,
+                    'email' => $email,
+                    'status' => $user->status
+                ]);
 
-            if ($user->status === 'inactive') {
                 return [
                     'success' => false,
-                    'message' => 'Your account is inactive. Please contact support.',
+                    'message' => 'Your account is not active. Please contact support.',
                     'account_inactive' => true
                 ];
             }
@@ -197,7 +260,8 @@ class OtpService
         } catch (\Exception $e) {
             Log::error('Failed to process OTP request', [
                 'email' => $email,
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
             ]);
 
             return [
@@ -214,10 +278,15 @@ class OtpService
 
     protected function invalidateExistingOtps(User $user): void
     {
-        $user->otpAttempts()
+        $updated = $user->otpAttempts()
             ->where('is_used', false)
             ->where('expires_at', '>', now())
             ->update(['is_used' => true]);
+
+        Log::info('Invalidated existing OTPs', [
+            'user_id' => $user->id,
+            'count' => $updated
+        ]);
     }
 
     protected function isRateLimited(User $user): bool
@@ -246,14 +315,76 @@ class OtpService
 
     protected function sendOtpEmail(User $user, string $otpCode, string $purpose): void
     {
-        // You'll need to create this Mailable class
-        Mail::to($user->email)->send(new \App\Mail\OtpMail($user, $otpCode, $purpose));
+        try {
+            Log::info('Attempting to send OTP email', [
+                'user_id' => $user->id,
+                'email' => $user->email,
+                'purpose' => $purpose,
+                'mail_driver' => config('mail.default'),
+                'otp_code' => config('app.debug') ? $otpCode : '***hidden***'
+            ]);
+
+            // Check if we're using log driver and log the OTP directly
+            if (config('mail.default') === 'log') {
+                Log::channel('mail')->info('OTP EMAIL WOULD BE SENT', [
+                    'to' => $user->email,
+                    'subject' => "Your {$purpose} code - VenuePro",
+                    'otp_code' => $otpCode,
+                    'user_name' => $user->first_name,
+                    'purpose' => $purpose,
+                    'expires_in' => $this->otpExpireMinutes . ' minutes'
+                ]);
+            }
+
+            // Send the actual email
+            Mail::to($user->email)->send(new OtpMail($user, $otpCode, $purpose));
+
+            Log::info('OTP email sent successfully', [
+                'user_id' => $user->id,
+                'email' => $user->email,
+                'purpose' => $purpose
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Failed to send OTP email', [
+                'user_id' => $user->id,
+                'email' => $user->email,
+                'purpose' => $purpose,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            // Re-throw the exception so the calling method knows it failed
+            throw $e;
+        }
     }
 
     public function cleanupExpiredOtps(): int
     {
-        return OtpAttempt::where('expires_at', '<', now())
+        $count = OtpAttempt::where('expires_at', '<', now())
             ->where('is_used', false)
             ->update(['is_used' => true]);
+
+        Log::info('Cleaned up expired OTPs', ['count' => $count]);
+
+        return $count;
+    }
+
+    /**
+     * Debug method to get the latest OTP for a user (development only)
+     */
+    public function getLatestOtpForUser(User $user): ?string
+    {
+        if (!config('app.debug')) {
+            return null;
+        }
+
+        $otpAttempt = $user->otpAttempts()
+            ->where('is_used', false)
+            ->where('expires_at', '>', now())
+            ->orderBy('created_at', 'desc')
+            ->first();
+
+        return $otpAttempt ? $otpAttempt->otp_code : null;
     }
 }

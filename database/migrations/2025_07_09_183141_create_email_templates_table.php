@@ -8,7 +8,7 @@ class CreateEmailTemplatesTable extends Migration
 {
     public function up()
     {
-        Schema::create('email_templatez', function (Blueprint $table) {
+        Schema::create('email_template', function (Blueprint $table) {
             $table->id();
             $table->string('name', 191);
             $table->string('subject');

@@ -15,16 +15,14 @@ use Inertia\Inertia;
 |
 */
 Route::get('/', function () {
-    return Inertia::render('Welcome');  // ✅ Fixed: Use Inertia::render instead of view()
-});
+    return Inertia::render('Welcome');
+})->name('home');
 
 
-// TENANT DOMAIN ROUTES
 Route::middleware([
-    'tenant',
-    'not_tenant',
-    'auth',
-    'verified'
+    'tenant', // Requires tenant to be set
+    'auth',   // Requires authentication
+    'verified' // Requires email verification
 ])->group(function () {
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
 
