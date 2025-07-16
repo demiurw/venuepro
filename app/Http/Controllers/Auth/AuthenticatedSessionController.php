@@ -3,348 +3,222 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
-use App\Models\User;
+use App\Http\Requests\Auth\LoginRequest;
+use App\Http\Middleware\DashboardRedirectMiddleware;
 use App\Services\Auth\OtpService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
 class AuthenticatedSessionController extends Controller
 {
-    protected $otpService;
-
-    public function __construct(OtpService $otpService)
-    {
-        $this->otpService = $otpService;
-    }
+    public function __construct(
+        private OtpService $otpService
+    ) {}
 
     /**
-     * Show the login page.
-     * For OTP-only authentication, this shows a simple login form that redirects to OTP.
+     * Display the login view.
      */
-    public function create(Request $request): Response
+    public function create(): Response
     {
-        return Inertia::render('auth/Login', [
-            'canResetPassword' => Route::has('password.request'),
-            'status' => $request->session()->get('status'),
-            'message' => $request->session()->get('message'),
-            'authMethod' => 'otp', // Indicate this is OTP-only
-            'otpStep' => $request->session()->get('otp_step', 'request'),
-            'otpEmail' => $request->session()->get('otp_email', ''),
-        ]);
+        return Inertia::render('auth/Login');
     }
 
     /**
-     * Handle an incoming OTP login request.
-     * This method processes the initial email submission for OTP generation.
+     * Handle OTP request (first step of login)
      */
     public function requestOtp(Request $request): RedirectResponse
     {
         $request->validate([
-            'email' => 'required|string|email|exists:users,email',
-        ], [
-            'email.exists' => 'No account found with this email address.',
+            'email' => 'required|email|exists:users,email',
         ]);
 
+        $email = $request->email;
+
+        // Rate limiting
+        $key = 'otp-request:' . $email;
+        if (RateLimiter::tooManyAttempts($key, 3)) {
+            $seconds = RateLimiter::availableIn($key);
+            throw ValidationException::withMessages([
+                'email' => ["Too many OTP requests. Please try again in {$seconds} seconds."],
+            ]);
+        }
+
+        RateLimiter::hit($key, 60); // 1 minute window
+
         try {
-            // Find the user
-            $user = User::where('email', strtolower(trim($request->email)))->first();
+            // Find the user by email
+            $user = \App\Models\User::where('email', $email)->first();
 
             if (!$user) {
-                return back()->withErrors([
-                    'email' => 'No account found with this email address.'
+                throw ValidationException::withMessages([
+                    'email' => ['User not found.'],
                 ]);
             }
 
-            // Check if user account is active
-            if (!$user->isActive()) {
-                $status = $user->status;
-
-                if ($status === 'pending') {
-                    return back()->withErrors([
-                        'email' => 'Your account is pending verification. Please check your email for activation instructions.'
-                    ]);
-                } elseif ($status === 'inactive') {
-                    return back()->withErrors([
-                        'email' => 'Your account has been deactivated. Please contact support for assistance.'
-                    ]);
-                }
-
-                return back()->withErrors([
-                    'email' => 'Your account is not active. Please contact support.'
+            // Check if user is active
+            if ($user->status !== 'active') {
+                throw ValidationException::withMessages([
+                    'email' => ['Your account is not active. Please contact your administrator.'],
                 ]);
             }
 
-            // Verify user has OTP authentication method
-            if (!$user->usesOtpAuth()) {
-                Log::warning('Login attempt on non-OTP user', [
-                    'user_id' => $user->id,
-                    'email' => $user->email,
-                    'auth_method' => $user->auth_method
-                ]);
+            $this->otpService->generateOtp($user);
 
-                return back()->withErrors([
-                    'email' => 'This account uses a different authentication method. Please contact support.'
-                ]);
-            }
-
-            // Generate and send OTP
-            $result = $this->otpService->generateOtp($user, 'login');
-
-            if ($result['success']) {
-                // Store email and step in session for the verification flow
-                $request->session()->put([
-                    'otp_email' => $user->email,
-                    'otp_step' => 'verify',
-                    'otp_user_id' => $user->id
-                ]);
-
-                Log::info('Login OTP generated successfully', [
-                    'user_id' => $user->id,
-                    'email' => $user->email,
-                    'expires_at' => $result['expires_at']
-                ]);
-
-                return redirect()->route('otp.create')->with([
-                    'status' => 'success',
-                    'message' => 'Login code sent to your email.',
-                    'step' => 'verify',
-                    'email' => $user->email,
-                    'expires_at' => $result['expires_at'],
-                ]);
-            } else {
-                return back()->withErrors([
-                    'email' => $result['message']
-                ]);
-            }
-
+            return redirect()->route('login')
+                ->with('otp_sent', true)
+                ->with('email', $email)
+                ->with('success', 'OTP sent to your email address.');
+        } catch (ValidationException $e) {
+            throw $e;
         } catch (\Exception $e) {
-            Log::error('Login OTP request failed', [
-                'email' => $request->email,
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
-            ]);
-
-            return back()->withErrors([
-                'email' => 'Failed to send login code. Please try again.'
-            ]);
+            return redirect()->back()
+                ->withErrors(['email' => 'Failed to send OTP. Please try again.']);
         }
     }
 
     /**
-     * Handle an incoming authentication request with OTP verification.
-     * This processes the OTP code submitted by the user.
+     * Handle OTP verification and authentication (second step of login)
      */
     public function store(Request $request): RedirectResponse
     {
         $request->validate([
-            'email' => 'required|string|email',
-            'otp_code' => 'required|string|size:6',
-            'remember' => 'boolean',
+            'email' => 'required|email|exists:users,email',
+            'otp' => 'required|string|size:6',
         ]);
 
+        $email = $request->email;
+        $otp = $request->otp;
+
+        // Rate limiting for OTP verification
+        $key = 'otp-verify:' . $email;
+        if (RateLimiter::tooManyAttempts($key, 5)) {
+            $seconds = RateLimiter::availableIn($key);
+            throw ValidationException::withMessages([
+                'otp' => ["Too many verification attempts. Please try again in {$seconds} seconds."],
+            ]);
+        }
+
         try {
-            // Find the user
-            $user = User::where('email', strtolower(trim($request->email)))->first();
+            // Find the user by email
+            $user = \App\Models\User::where('email', $email)->first();
 
             if (!$user) {
+                RateLimiter::hit($key, 60);
                 throw ValidationException::withMessages([
-                    'otp_code' => 'Invalid login attempt.',
+                    'email' => ['User not found.'],
                 ]);
             }
 
             // Verify the OTP
-            $result = $this->otpService->verifyOtp($user, $request->otp_code);
+            $isValidOtp = $this->otpService->verifyOtp($user, $otp);
 
-            if (!$result['success']) {
-                // Handle specific error types
-                if (isset($result['max_attempts_exceeded'])) {
-                    return back()->withErrors([
-                        'otp_code' => $result['message']
-                    ])->with([
-                        'step' => 'request', // Force back to email step
-                        'email' => $user->email
-                    ]);
-                }
-
-                if (isset($result['expired'])) {
-                    return back()->withErrors([
-                        'otp_code' => $result['message']
-                    ])->with([
-                        'step' => 'verify',
-                        'email' => $user->email,
-                        'otp_expired' => true
-                    ]);
-                }
-
-                // Generic OTP verification failure
-                return back()->withErrors([
-                    'otp_code' => $result['message']
-                ])->with([
-                    'step' => 'verify',
-                    'email' => $user->email,
-                    'attempts_remaining' => $result['attempts_remaining'] ?? 0
+            if (!$isValidOtp) {
+                RateLimiter::hit($key, 60);
+                throw ValidationException::withMessages([
+                    'otp' => ['The provided OTP is invalid or has expired.'],
                 ]);
             }
 
-            // OTP verification successful - log the user in
+            // Clear rate limiter on successful verification
+            RateLimiter::clear($key);
+
+            // Log the user in
             Auth::login($user, $request->boolean('remember'));
 
-            // Record login timestamp
-            $user->recordLogin();
+            // Update last login
+            $user->update(['last_login_at' => now()]);
 
-            // Set the tenant for this user
-            if ($user->company_id && $user->company) {
-                $user->company->makeCurrent();
-
-                Log::info('Tenant set after successful login', [
-                    'user_id' => $user->id,
-                    'company_id' => $user->company_id,
-                    'company_name' => $user->company->name
-                ]);
-            } else {
-                Log::warning('User logged in but has no company assigned', [
-                    'user_id' => $user->id,
-                    'email' => $user->email
-                ]);
-            }
-
-            // Regenerate session for security
+            // Regenerate session
             $request->session()->regenerate();
 
-            // Clear OTP-related session data
-            $request->session()->forget(['otp_email', 'otp_step', 'otp_user_id']);
+            // Redirect to appropriate dashboard based on user role
+            $dashboardRoute = DashboardRedirectMiddleware::getUserDashboardRoute($user);
 
-            Log::info('User logged in successfully via OTP', [
-                'user_id' => $user->id,
-                'email' => $user->email,
-                'remember' => $request->boolean('remember'),
-                'ip' => $request->ip(),
-                'user_agent' => $request->userAgent()
-            ]);
-
-            // Redirect to intended destination or dashboard
-            return redirect()->intended(route('dashboard', absolute: false))->with([
-                'status' => 'success',
-                'message' => 'Welcome back! You have been logged in successfully.'
-            ]);
+            return redirect()->intended($dashboardRoute);
 
         } catch (ValidationException $e) {
             throw $e;
         } catch (\Exception $e) {
-            Log::error('Login verification failed', [
-                'email' => $request->email,
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
-            ]);
-
-            return back()->withErrors([
-                'otp_code' => 'Login verification failed. Please try again.'
-            ])->with([
-                'step' => 'verify',
-                'email' => $request->email
-            ]);
+            RateLimiter::hit($key, 60);
+            return redirect()->back()
+                ->withErrors(['otp' => 'An error occurred during authentication. Please try again.']);
         }
     }
 
     /**
-     * Resend OTP for login.
+     * Resend OTP
      */
     public function resendOtp(Request $request): RedirectResponse
     {
         $request->validate([
-            'email' => 'required|string|email',
+            'email' => 'required|email|exists:users,email',
         ]);
 
+        $email = $request->email;
+
+        // Rate limiting for resend
+        $key = 'otp-resend:' . $email;
+        if (RateLimiter::tooManyAttempts($key, 2)) {
+            $seconds = RateLimiter::availableIn($key);
+            throw ValidationException::withMessages([
+                'email' => ["Too many resend requests. Please try again in {$seconds} seconds."],
+            ]);
+        }
+
+        RateLimiter::hit($key, 60);
+
         try {
-            $user = User::where('email', strtolower(trim($request->email)))->first();
+            // Find the user by email
+            $user = \App\Models\User::where('email', $email)->first();
 
-            if (!$user || !$user->isActive() || !$user->usesOtpAuth()) {
-                return back()->withErrors([
-                    'email' => 'Unable to resend code to this email address.'
+            if (!$user) {
+                throw ValidationException::withMessages([
+                    'email' => ['User not found.'],
                 ]);
             }
 
-            $result = $this->otpService->generateOtp($user, 'login');
-
-            if ($result['success']) {
-                Log::info('Login OTP resent successfully', [
-                    'user_id' => $user->id,
-                    'email' => $user->email
-                ]);
-
-                return back()->with([
-                    'status' => 'success',
-                    'message' => 'New login code sent to your email.',
-                    'step' => 'verify',
-                    'email' => $user->email,
-                    'expires_at' => $result['expires_at'],
-                ]);
-            } else {
-                return back()->withErrors([
-                    'email' => $result['message']
+            // Check if user is active
+            if ($user->status !== 'active') {
+                throw ValidationException::withMessages([
+                    'email' => ['Your account is not active. Please contact your administrator.'],
                 ]);
             }
 
+            $this->otpService->generateOtp($user);
+
+            return redirect()->back()
+                ->with('success', 'New OTP sent to your email address.');
+        } catch (ValidationException $e) {
+            throw $e;
         } catch (\Exception $e) {
-            Log::error('Failed to resend login OTP', [
-                'email' => $request->email,
-                'error' => $e->getMessage()
-            ]);
-
-            return back()->withErrors([
-                'email' => 'Failed to resend login code. Please try again.'
-            ]);
+            return redirect()->back()
+                ->withErrors(['email' => 'Failed to resend OTP. Please try again.']);
         }
     }
 
     /**
-     * Destroy an authenticated session (logout).
+     * Show login help page
+     */
+    public function showLoginHelp(): Response
+    {
+        return Inertia::render('Auth/LoginHelp');
+    }
+
+    /**
+     * Destroy an authenticated session.
      */
     public function destroy(Request $request): RedirectResponse
     {
-        $user = Auth::user();
-
-        if ($user) {
-            Log::info('User logged out', [
-                'user_id' => $user->id,
-                'email' => $user->email
-            ]);
-        }
-
         Auth::guard('web')->logout();
 
         $request->session()->invalidate();
         $request->session()->regenerateToken();
 
-        // Clear any OTP-related session data
-        $request->session()->forget(['otp_email', 'otp_step', 'otp_user_id']);
-
-        return redirect('/')->with([
-            'status' => 'success',
-            'message' => 'You have been logged out successfully.'
-        ]);
-    }
-
-    /**
-     * Show login instructions or redirect based on authentication method.
-     * This is a helper method for displaying OTP-specific login guidance.
-     */
-    public function showLoginHelp(): Response
-    {
-        return Inertia::render('Auth/LoginHelp', [
-            'authentication_method' => 'otp',
-            'features' => [
-                'No passwords to remember',
-                'Secure email-based verification',
-                'Time-limited access codes',
-                'Enhanced account security'
-            ]
-        ]);
+        return redirect('/login');
     }
 }

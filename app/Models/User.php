@@ -60,6 +60,36 @@ class User extends Authenticatable implements MustVerifyEmail
         'oauth_providers' => 'array',
     ];
 
+    // Relationships
+    public function company()
+    {
+        return $this->belongsTo(Company::class);
+    }
+
+
+
+
+
+
+    public function getUserTypeDisplayNameAttribute()
+    {
+        return UserNavigationHelper::getUserTypeDisplayName($this);
+    }
+
+    public function getNavigationMenuAttribute()
+    {
+        return UserNavigationHelper::getNavigationMenu($this);
+    }
+
+    public function getDashboardRouteAttribute()
+    {
+        return UserNavigationHelper::getDashboardRoute($this->user_type);
+    }
+
+    public function canAccessFeature(string $feature): bool
+    {
+        return UserNavigationHelper::canAccessFeature($this, $feature);
+    }
     /**
      * Get the user's full name.
      *
