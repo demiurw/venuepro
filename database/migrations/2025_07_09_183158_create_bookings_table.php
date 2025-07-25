@@ -8,7 +8,7 @@ class CreateBookingsTable extends Migration
 {
     public function up()
     {
-        Schema::create('booking', function (Blueprint $table) {
+        Schema::create('bookings', function (Blueprint $table) {
             $table->id();
             $table->foreignId('company_id')->constrained('companies')->onDelete('cascade');
             $table->foreignId('room_id')->constrained('room')->onDelete('cascade');
@@ -47,6 +47,6 @@ class CreateBookingsTable extends Migration
 
     public function down()
     {
-        Schema::dropIfExists('booking');
+        Schema::dropIfExists('bookings');
     }
 }

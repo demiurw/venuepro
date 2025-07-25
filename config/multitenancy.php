@@ -46,7 +46,7 @@ return [
  * A valid task is any class that implements \Spatie\Multitenancy\Tasks\SwitchTenantTask
  */
     'switch_tenant_tasks' => [
-        \Spatie\Multitenancy\Tasks\SwitchTenantDatabaseTask::class,
+        // We're using single-database multi-tenancy with scopes, so no database switching needed
     ],
 
     /*

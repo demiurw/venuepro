@@ -21,7 +21,14 @@ class AdminDashboardController extends Controller
                     $q->where('company_id', $user->company_id);
                 })->count(),
                 'active_bookings' => \App\Models\Booking::where('company_id', $user->company_id)
-                    ->where('start_time', '>=', now())
+                    ->where(function($query) {
+                        $query->where('date', '>', now()->toDateString())
+                              ->orWhere(function($q) {
+                                  $q->where('date', '=', now()->toDateString())
+                                    ->whereTime('start_time', '>=', now()->toTimeString());
+                              });
+                    })
+                    ->where('status', '!=', 'cancelled')
                     ->count(),
                 'pending_approvals' => 0, // Implement based on your approval system
             ],

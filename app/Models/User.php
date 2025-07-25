@@ -9,6 +9,7 @@ use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
 use Spatie\Permission\Traits\HasRoles;
 use App\Traits\BelongsToTenant;
+use App\Helpers\UserNavigationHelper;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class User extends Authenticatable implements MustVerifyEmail
@@ -60,16 +61,31 @@ class User extends Authenticatable implements MustVerifyEmail
         'oauth_providers' => 'array',
     ];
 
+    /**
+     * Override getAuthPassword to return null since we don't use passwords.
+     *
+     * @return string|null
+     */
+    public function getAuthPassword()
+    {
+        return null;
+    }
+
+    /**
+     * Override getAuthPasswordName to return null since we don't use passwords.
+     *
+     * @return string|null
+     */
+    public function getAuthPasswordName()
+    {
+        return null;
+    }
+
     // Relationships
     public function company()
     {
         return $this->belongsTo(Company::class);
     }
-
-
-
-
-
 
     public function getUserTypeDisplayNameAttribute()
     {
@@ -90,6 +106,7 @@ class User extends Authenticatable implements MustVerifyEmail
     {
         return UserNavigationHelper::canAccessFeature($this, $feature);
     }
+
     /**
      * Get the user's full name.
      *

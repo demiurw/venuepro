@@ -4,6 +4,7 @@ use App\Http\Middleware\DashboardRedirectMiddleware;
 use App\Http\Middleware\HandleAppearance;
 use App\Http\Middleware\HandleInertiaRequests;
 use App\Http\Middleware\RoleAccessMiddleware;
+use App\Http\Middleware\SetTenantFromUser;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -25,9 +26,10 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
 
         $middleware->alias([
-            'tenant' => \Spatie\Multitenancy\Http\Middleware\NeedsTenant::class,
+            'tenant' => SetTenantFromUser::class,
             'dashboard.redirect' => DashboardRedirectMiddleware::class,
-            'role.access' => RoleAccessMiddleware::class,]);
+            'role.access' => RoleAccessMiddleware::class,
+        ]);
     })
     ->withProviders([
         // This is now in the correct place

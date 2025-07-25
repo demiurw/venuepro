@@ -19,18 +19,7 @@ class Company extends Tenant
         'is_active',
     ];
 
-    /**
-     * Dynamically generates the tenant's database name.
-     *
-     * @return string
-     */
-    public function getDatabaseName(): string
-    {
-        // Example: returns "venuepro_tenant_innovate"
-        $prefix = config('multitenancy.database.prefix');
-
-        return "{$prefix}{$this->slug}";
-    }
+    // Using single-database multi-tenancy with scopes, so no separate database needed
 
     public function users()
     {

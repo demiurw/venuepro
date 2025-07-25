@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\OtpRequest;
 use App\Services\Auth\OtpService;
 use App\Models\User;
+use App\Http\Middleware\DashboardRedirectMiddleware;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
@@ -87,18 +88,31 @@ class OtpController extends Controller
             // Regenerate session for security
             $request->session()->regenerate();
 
+            // Update last login timestamp
+            $user->update(['last_login_at' => now()]);
+
             Log::info('User logged in via OTP', [
                 'user_id' => $user->id,
                 'email' => $user->email,
-                'ip' => $request->ip()
+                'ip' => $request->ip(),
+                'user_type' => $user->user_type
             ]);
 
-            // Redirect based on user status
+            // Redirect based on user status and role
             if ($user->isPending()) {
                 return redirect()->route('verification.notice');
             }
 
-            return redirect()->intended(route('dashboard'));
+            // Use the role-based dashboard redirection
+            $dashboardRoute = DashboardRedirectMiddleware::getUserDashboardRoute($user);
+
+            Log::info('Redirecting user to role-based dashboard', [
+                'user_id' => $user->id,
+                'user_type' => $user->user_type,
+                'dashboard_route' => $dashboardRoute
+            ]);
+
+            return redirect()->intended($dashboardRoute);
         }
 
         // Handle different error cases
@@ -211,7 +225,10 @@ class OtpController extends Controller
                 'email' => $user->email,
             ]);
 
-            return redirect()->route('dashboard')->with([
+            // Use role-based dashboard redirection for newly activated users too
+            $dashboardRoute = DashboardRedirectMiddleware::getUserDashboardRoute($user);
+
+            return redirect($dashboardRoute)->with([
                 'status' => 'success',
                 'message' => 'Your account has been activated successfully!'
             ]);
