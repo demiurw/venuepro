@@ -20,15 +20,17 @@ const showAvatar = computed(() => props.user.avatar && props.user.avatar !== '')
 </script>
 
 <template>
-    <Avatar class="h-8 w-8 overflow-hidden rounded-lg">
-        <AvatarImage v-if="showAvatar" :src="user.avatar!" :alt="user.name" />
-        <AvatarFallback class="rounded-lg text-black dark:text-white">
+    <!-- Modern Avatar with enhanced styling -->
+    <Avatar class="h-9 w-9 overflow-hidden rounded-xl border-2 border-border/50 bg-gradient-to-br from-primary/10 to-accent/10">
+        <AvatarImage v-if="showAvatar" :src="user.avatar!" :alt="user.name" class="object-cover" />
+        <AvatarFallback class="rounded-xl bg-gradient-to-br from-primary/20 to-accent/20 font-semibold text-primary border-0">
             {{ getInitials(user.name) }}
         </AvatarFallback>
     </Avatar>
 
-    <div class="grid flex-1 text-left text-sm leading-tight">
-        <span class="truncate font-medium">{{ user.name }}</span>
-        <span v-if="showEmail" class="truncate text-xs text-muted-foreground">{{ user.email }}</span>
+    <!-- Enhanced Text Layout -->
+    <div class="grid flex-1 text-left leading-tight">
+        <span class="truncate font-semibold text-foreground text-sm">{{ user.name }}</span>
+        <span v-if="showEmail" class="truncate text-xs text-muted-foreground font-medium">{{ user.email }}</span>
     </div>
 </template>

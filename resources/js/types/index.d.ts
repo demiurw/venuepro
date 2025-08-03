@@ -17,6 +17,7 @@ export interface NavItem {
     href: string;
     icon?: LucideIcon;
     isActive?: boolean;
+    badge?: string;
 }
 
 // Navigation menu item for role-based menus
