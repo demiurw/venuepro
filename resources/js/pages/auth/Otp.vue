@@ -119,7 +119,7 @@
                         id="otp_code"
                         v-model="verifyForm.otp_code"
                         type="text"
-                        class="text-center text-2xl tracking-[0.5em] font-mono"
+                        class="text-center text-3xl tracking-[0.75em] font-mono py-6 bg-gray-50 border-2 border-gray-200 focus:border-primary focus:bg-white transition-colors"
                         placeholder="000000"
                         maxlength="6"
                         required
@@ -162,23 +162,38 @@
             </form>
 
             <!-- Resend OTP -->
-            <div class="text-center space-y-2">
-                <div v-if="!canResend && countdown > 0" class="text-sm text-muted-foreground">
-                    Wait {{ formattedCountdown }} before requesting a new code
+            <div class="text-center space-y-3">
+                <div v-if="countdown > 0 && !canResend" class="space-y-2">
+                    <div class="text-sm text-muted-foreground">
+                        Code expires in {{ formattedCountdown }}
+                    </div>
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        disabled
+                        class="w-full opacity-50"
+                    >
+                        <RotateCcw class="h-4 w-4 mr-2" />
+                        Get Code ({{ formattedCountdown }})
+                    </Button>
                 </div>
 
-                <Button
-                    v-else
-                    variant="outline"
-                    size="sm"
-                    @click="resendOtp"
-                    :disabled="isResending || !canResend"
-                    class="w-full"
-                >
-                    <LoaderCircle v-if="isResending" class="h-4 w-4 animate-spin mr-2" />
-                    <RotateCcw v-else class="h-4 w-4 mr-2" />
-                    {{ isResending ? 'Sending...' : 'Send new code' }}
-                </Button>
+                <div v-else class="space-y-2">
+                    <div v-if="countdown <= 0" class="text-sm text-muted-foreground">
+                        Your code has expired
+                    </div>
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        @click="resendOtp"
+                        :disabled="isResending"
+                        class="w-full"
+                    >
+                        <LoaderCircle v-if="isResending" class="h-4 w-4 animate-spin mr-2" />
+                        <RotateCcw v-else class="h-4 w-4 mr-2" />
+                        {{ isResending ? 'Sending...' : 'Get Code' }}
+                    </Button>
+                </div>
 
                 <div class="pt-2">
                     <Button

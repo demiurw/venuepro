@@ -26,12 +26,65 @@
                 </div>
             </div>
             <div
+                v-else-if="status === 'account_inactive'"
+                class="p-4 bg-yellow-50 border border-yellow-200 rounded-lg"
+            >
+                <div class="flex items-start space-x-3">
+                    <AlertCircle class="h-5 w-5 text-yellow-500 mt-0.5 flex-shrink-0" />
+                    <div class="flex-1">
+                        <h4 class="text-sm font-medium text-yellow-900">Account Verification Required</h4>
+                        <p class="text-sm text-yellow-700 mt-1">
+                            {{ message || 'Your account needs to be verified before you can sign in.' }}
+                        </p>
+                        <div class="mt-3">
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                @click="redirectToVerification"
+                                class="bg-yellow-100 hover:bg-yellow-200 border-yellow-300"
+                            >
+                                <Mail class="h-4 w-4 mr-2" />
+                                Verify Account
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div
                 v-else-if="message"
                 class="p-4 bg-blue-50 border border-blue-200 rounded-lg"
             >
                 <div class="flex items-center">
                     <Info class="h-5 w-5 text-blue-500 mr-2" />
                     <p class="text-sm text-blue-700">{{ message }}</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Pending Account Verification -->
+        <div v-if="props.pendingUser && currentStep === 'request'" class="mb-6">
+            <div class="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                <div class="flex items-start space-x-3">
+                    <AlertCircle class="h-5 w-5 text-yellow-500 mt-0.5 flex-shrink-0" />
+                    <div class="flex-1">
+                        <h4 class="text-sm font-medium text-yellow-900">Account Verification Required</h4>
+                        <p class="text-sm text-yellow-700 mt-1">
+                            Your account for <span class="font-medium">{{ props.pendingUser.email }}</span> needs to be verified.
+                            Click below to resend the activation code.
+                        </p>
+                        <div class="mt-3">
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                @click="handlePendingVerification"
+                                :disabled="emailForm.processing"
+                                class="bg-yellow-100 hover:bg-yellow-200 border-yellow-300"
+                            >
+                                <Mail class="h-4 w-4 mr-2" />
+                                Resend verification code
+                            </Button>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -289,6 +342,10 @@ interface Props {
     authMethod?: string;
     otpStep?: string;
     otpEmail?: string;
+    pendingUser?: {
+        email: string;
+        id: number;
+    };
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -329,13 +386,33 @@ const formattedCountdown = computed(() => {
 // Methods
 const submitEmailForm = () => {
     emailForm.post(route('login.submit'), {
-        onSuccess: () => {
-            currentStep.value = 'verify';
-            verifyForm.email = emailForm.email;
-            startCountdown();
+        onSuccess: (page) => {
+            // Check if response indicates pending account
+            if (page.props.pendingUser) {
+                // Redirect to verification page for account activation
+                const url = route('verification.send', {
+                    email: emailForm.email,
+                    verification_type: 'account_activation'
+                });
+                window.location.href = url;
+            } else {
+                currentStep.value = 'verify';
+                verifyForm.email = emailForm.email;
+                startCountdown();
+            }
         },
         onError: (errors) => {
             console.error('Email form errors:', errors);
+            
+            // Check for "account not active" error
+            if (errors.email && errors.email.includes('account is not active')) {
+                // Redirect to OTP verification page for account activation
+                const url = route('otp.create', {
+                    email: emailForm.email,
+                    verification_type: 'account_activation'
+                });
+                window.location.href = url;
+            }
         }
     });
 };
@@ -425,6 +502,27 @@ const formatOtpInput = (event: Event) => {
     verifyForm.otp_code = value;
 };
 
+// Handle pending account verification
+const handlePendingVerification = () => {
+    if (props.pendingUser) {
+        // Pre-fill the email and redirect to OTP verification page
+        const url = route('otp.create', {
+            email: props.pendingUser.email,
+            verification_type: 'account_activation'
+        });
+        window.location.href = url;
+    }
+};
+
+// Redirect to verification page
+const redirectToVerification = () => {
+    const url = route('otp.create', {
+        email: emailForm.email,
+        verification_type: 'account_activation'
+    });
+    window.location.href = url;
+};
+
 // Social login handler
 const loginWithProvider = (provider: 'google' | 'microsoft') => {
     window.location.href = route('auth.social.redirect', { provider });
@@ -432,6 +530,11 @@ const loginWithProvider = (provider: 'google' | 'microsoft') => {
 
 // Lifecycle
 onMounted(() => {
+    // Pre-fill email if pending user exists
+    if (props.pendingUser && !emailForm.email) {
+        emailForm.email = props.pendingUser.email;
+    }
+
     if (currentStep.value === 'verify' && displayEmail.value) {
         startCountdown();
 

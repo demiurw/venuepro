@@ -67,6 +67,7 @@ class OtpMail extends Mailable implements ShouldQueue
         return match ($this->purpose) {
             'login' => 'Your Login Code - VenuePro',
             'verification' => 'Verify Your Account - VenuePro',
+            'account_verification' => 'Activate Your Account - VenuePro',
             'password_reset' => 'Reset Your Password - VenuePro',
             default => 'Your Verification Code - VenuePro',
         };

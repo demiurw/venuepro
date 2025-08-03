@@ -147,6 +147,16 @@ class User extends Authenticatable implements MustVerifyEmail
         return $this->status === 'pending';
     }
 
+    /**
+     * Activate the user account.
+     *
+     * @return bool
+     */
+    public function activate()
+    {
+        return $this->update(['status' => 'active']);
+    }
+
     public function isOtpUser()
     {
         return $this->usesOtpAuth();

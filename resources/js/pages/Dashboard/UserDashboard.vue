@@ -226,8 +226,8 @@
 
 <script setup>
 import AppLayout from '@/layouts/AppLayout.vue'
-import Heading from '@/components/ui/Heading.vue'
-import Button from '@/components/ui/Button.vue'
+import Heading from '@/components/Heading.vue'
+import { Button } from '@/components/ui/button'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 
 // Placeholder data

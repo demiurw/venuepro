@@ -15,6 +15,8 @@ class OtpAttempt extends Model
     protected $fillable = [
         'company_id',
         'user_id',
+        'email',
+        'purpose',
         'otp_code',
         'expires_at',
         'is_used',
