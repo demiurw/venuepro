@@ -16,61 +16,86 @@ import {
     BarChart3,
     BookOpenCheck,
     Shield,
-    Bell
+    Bell,
+    Building,
+    Home,
+    UserCheck,
+    Users2,
+    FileText,
+    PlusSquare,
+    ClipboardList
 } from 'lucide-vue-next';
+import { computed } from 'vue';
 import AppLogo from './AppLogo.vue';
 
 const page = usePage();
 
-// Enhanced navigation structure inspired by modern scheduling platforms
-const mainNavItems: NavItem[] = [
-    {
-        title: 'Dashboard',
-        href: '/dashboard',
-        icon: LayoutGrid,
-        badge: undefined,
-    },
-    {
-        title: 'Bookings',
-        href: '/bookings',
-        icon: Calendar,
-        badge: '12',
-    },
-    {
-        title: 'Venues',
-        href: '/venues',
-        icon: MapPin,
-        badge: undefined,
-    },
-    {
-        title: 'Users',
-        href: '/users',
-        icon: Users,
-        badge: undefined,
-    },
-    {
-        title: 'Reports',
-        href: '/reports',
-        icon: BarChart3,
-        badge: undefined,
-    },
-];
+// Icon mapping for backend navigation items
+const iconMap = {
+    dashboard: LayoutGrid,
+    building: Building,
+    room: Home,
+    users: Users,
+    people: Users2,
+    group: Users2,
+    assessment: BarChart3,
+    settings: Settings,
+    event: Calendar,
+    approval: UserCheck,
+    person: Users,
+    calendar: Calendar,
+    request: ClipboardList,
+    business: Building,
+    analytics: BarChart3,
+    health: Shield,
+    person_add: PlusSquare,
+    add_location: MapPin,
+    event_note: BookOpenCheck,
+    list: FileText
+};
 
-const quickAccessItems: NavItem[] = [
-    {
-        title: 'New Booking',
-        href: '/bookings/create',
-        icon: BookOpenCheck,
+// Get navigation items from the backend user data
+const mainNavItems = computed<NavItem[]>(() => {
+    const user = page.props.auth?.user;
+    if (!user?.navigation_menu) return [];
+    
+    return user.navigation_menu.map((item: any) => ({
+        title: item.name,
+        href: route(item.route),
+        icon: iconMap[item.icon] || LayoutGrid,
         badge: undefined,
-    },
-    {
-        title: 'Notifications',
-        href: '/notifications',
-        icon: Bell,
-        badge: '3',
-    },
-];
+    }));
+});
 
+// Get quick actions from the backend user data
+const quickAccessItems = computed<NavItem[]>(() => {
+    const user = page.props.auth?.user;
+    let items: NavItem[] = [];
+    
+    // Add User Management for system_admin users
+    if (user?.user_type === 'system_admin') {
+        items.push({
+            title: 'User Management',
+            href: route('admin.users.index'),
+            icon: Users,
+            badge: undefined,
+        });
+    }
+    
+    if (user?.permissions?.quick_actions && Array.isArray(user.permissions.quick_actions)) {
+        const backendItems = user.permissions.quick_actions.slice(0, 3).map((item: any) => ({
+            title: item.name,
+            href: route(item.route),
+            icon: iconMap[item.icon] || BookOpenCheck,
+            badge: undefined,
+        }));
+        items = [...items, ...backendItems];
+    }
+    
+    return items;
+});
+
+// Static system navigation items (can be role-based if needed)
 const systemNavItems: NavItem[] = [
     {
         title: 'Settings',
@@ -78,25 +103,19 @@ const systemNavItems: NavItem[] = [
         icon: Settings,
         badge: undefined,
     },
-    {
-        title: 'Admin Panel',
-        href: '/admin',
-        icon: Shield,
-        badge: undefined,
-    },
 ];
 
 const footerNavItems: NavItem[] = [
     {
-        title: 'Github Repo',
-        href: 'https://github.com/laravel/vue-starter-kit',
-        icon: Folder,
+        title: 'Help Center',
+        href: '/help',
+        icon: BookOpen,
         badge: undefined,
     },
     {
-        title: 'Documentation',
-        href: 'https://laravel.com/docs/starter-kits#vue',
-        icon: BookOpen,
+        title: 'Support',
+        href: '/support',
+        icon: Folder,
         badge: undefined,
     },
 ];
@@ -123,7 +142,7 @@ const footerNavItems: NavItem[] = [
             <NavMain :items="mainNavItems" />
             
             <!-- Quick Access Section -->
-            <div class="mt-6">
+            <div v-if="quickAccessItems.length > 0" class="mt-6">
                 <div class="px-3 py-2">
                     <h3 class="text-caption font-semibold text-sidebar-foreground/60 uppercase tracking-wider">
                         Quick Actions
@@ -153,7 +172,7 @@ const footerNavItems: NavItem[] = [
             </div>
 
             <!-- System Section -->
-            <div class="mt-6">
+            <div v-if="systemNavItems.length > 0" class="mt-6">
                 <div class="px-3 py-2">
                     <h3 class="text-caption font-semibold text-sidebar-foreground/60 uppercase tracking-wider">
                         System

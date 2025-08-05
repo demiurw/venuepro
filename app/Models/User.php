@@ -10,6 +10,7 @@ use Laravel\Sanctum\HasApiTokens;
 use Spatie\Permission\Traits\HasRoles;
 use App\Traits\BelongsToTenant;
 use App\Helpers\UserNavigationHelper;
+use App\Enums\UserStatus;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class User extends Authenticatable implements MustVerifyEmail
@@ -59,6 +60,7 @@ class User extends Authenticatable implements MustVerifyEmail
         'email_verified_at' => 'datetime',
         'last_login_at' => 'datetime',
         'oauth_providers' => 'array',
+        'status' => UserStatus::class,
     ];
 
     /**
@@ -134,7 +136,7 @@ class User extends Authenticatable implements MustVerifyEmail
      */
     public function isActive()
     {
-        return $this->status === 'active';
+        return $this->status === UserStatus::ACTIVE;
     }
 
     /**
@@ -144,7 +146,37 @@ class User extends Authenticatable implements MustVerifyEmail
      */
     public function isPending()
     {
-        return $this->status === 'pending';
+        return $this->status === UserStatus::PENDING;
+    }
+
+    /**
+     * Check if the user is inactive.
+     *
+     * @return bool
+     */
+    public function isInactive()
+    {
+        return $this->status === UserStatus::INACTIVE;
+    }
+
+    /**
+     * Check if user can access the system.
+     *
+     * @return bool
+     */
+    public function canAccessSystem()
+    {
+        return $this->status->allowsAccess();
+    }
+
+    /**
+     * Check if user requires verification.
+     *
+     * @return bool
+     */
+    public function requiresVerification()
+    {
+        return $this->status->requiresVerification();
     }
 
     /**
@@ -154,7 +186,30 @@ class User extends Authenticatable implements MustVerifyEmail
      */
     public function activate()
     {
-        return $this->update(['status' => 'active']);
+        return $this->update([
+            'status' => UserStatus::ACTIVE,
+            'email_verified_at' => $this->email_verified_at ?? now(),
+        ]);
+    }
+
+    /**
+     * Deactivate the user account.
+     *
+     * @return bool
+     */
+    public function deactivate()
+    {
+        return $this->update(['status' => UserStatus::INACTIVE]);
+    }
+
+    /**
+     * Set user status to pending.
+     *
+     * @return bool
+     */
+    public function setPending()
+    {
+        return $this->update(['status' => UserStatus::PENDING]);
     }
 
     public function isOtpUser()
@@ -285,6 +340,23 @@ class User extends Authenticatable implements MustVerifyEmail
     public function recordLogin()
     {
         $this->update(['last_login_at' => now()]);
+    }
+
+    /**
+     * Record successful login and activation if pending.
+     *
+     * @return void
+     */
+    public function recordSuccessfulLogin()
+    {
+        $updates = ['last_login_at' => now()];
+        
+        // Auto-activate if pending and email is verified
+        if ($this->isPending() && $this->hasVerifiedEmail()) {
+            $updates['status'] = UserStatus::ACTIVE;
+        }
+        
+        $this->update($updates);
     }
 
     /**

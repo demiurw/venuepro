@@ -41,4 +41,9 @@ class ExternalDashboardController extends Controller
     {
         return Inertia::render('External/Requests');
     }
+
+    public function createRequest(): Response
+    {
+        return Inertia::render('External/CreateRequest');
+    }
 }

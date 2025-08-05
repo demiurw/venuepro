@@ -335,7 +335,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue';
-import { Head, useForm } from '@inertiajs/vue3';
+import { Head, useForm, router } from '@inertiajs/vue3';
 import AuthBase from '@/layouts/AuthLayout.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -363,9 +363,15 @@ interface Props {
     authMethod?: string;
     otpStep?: string;
     otpEmail?: string;
+    otpSent?: boolean;
     pendingUser?: {
         email: string;
         id: number;
+    };
+    flash?: {
+        otp_sent?: boolean;
+        email?: string;
+        success?: string;
     };
 }
 
@@ -408,32 +414,18 @@ const formattedCountdown = computed(() => {
 const submitEmailForm = () => {
     emailForm.post(route('login.submit'), {
         onSuccess: (page) => {
-            // Check if response indicates pending account
-            if (page.props.pendingUser) {
-                // Redirect to verification page for account activation
-                const url = route('verification.send', {
-                    email: emailForm.email,
-                    verification_type: 'account_activation'
-                });
-                window.location.href = url;
-            } else {
+            // Check if OTP was sent successfully
+            if (page.props.flash?.otp_sent || page.props.otp_sent || page.props.otpStep === 'verify') {
                 currentStep.value = 'verify';
-                verifyForm.email = emailForm.email;
+                verifyForm.email = page.props.otpEmail || emailForm.email;
                 startCountdown();
             }
+            // For all other cases, let the server handle the redirect via standard Inertia response
         },
         onError: (errors) => {
             console.error('Email form errors:', errors);
-            
-            // Check for "account not active" error
-            if (errors.email && errors.email.includes('account is not active')) {
-                // Redirect to OTP verification page for account activation
-                const url = route('otp.create', {
-                    email: emailForm.email,
-                    verification_type: 'account_activation'
-                });
-                window.location.href = url;
-            }
+            // Let the server handle all error-based routing decisions
+            // Client should not override server routing based on error messages
         }
     });
 };
@@ -523,25 +515,23 @@ const formatOtpInput = (event: Event) => {
     verifyForm.otp_code = value;
 };
 
-// Handle pending account verification
+// Handle pending account verification using Inertia navigation
 const handlePendingVerification = () => {
     if (props.pendingUser) {
-        // Pre-fill the email and redirect to OTP verification page
-        const url = route('otp.create', {
+        // Pre-fill the email and redirect to verification page
+        router.visit(route('auth.verify-otp', {
             email: props.pendingUser.email,
-            verification_type: 'account_activation'
-        });
-        window.location.href = url;
+            step: 'request'
+        }));
     }
 };
 
-// Redirect to verification page
+// Redirect to verification page using Inertia navigation
 const redirectToVerification = () => {
-    const url = route('otp.create', {
+    router.visit(route('auth.verify-otp', {
         email: emailForm.email,
-        verification_type: 'account_activation'
-    });
-    window.location.href = url;
+        step: 'request'
+    }));
 };
 
 // Social login handler
@@ -556,8 +546,21 @@ onMounted(() => {
         emailForm.email = props.pendingUser.email;
     }
 
-    if (currentStep.value === 'verify' && displayEmail.value) {
+    // Check if OTP was sent (from flash data or props) and switch to verify step
+    if (props.flash?.otp_sent || props.otpSent || props.otpStep === 'verify') {
+        currentStep.value = 'verify';
+        if (props.flash?.email || props.otpEmail) {
+            const email = props.flash?.email || props.otpEmail;
+            verifyForm.email = email;
+            emailForm.email = email;
+        }
         startCountdown();
+    }
+
+    if (currentStep.value === 'verify' && displayEmail.value) {
+        if (!countdownInterval) {
+            startCountdown();
+        }
 
         // Auto-focus OTP input if we're in verify step
         setTimeout(() => {

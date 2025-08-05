@@ -31,7 +31,7 @@ class AuthenticatedSessionController extends Controller
     /**
      * Handle OTP request (first step of login)
      */
-    public function requestOtp(Request $request): RedirectResponse
+    public function requestOtp(Request $request): RedirectResponse|Response
     {
         $request->validate([
             'email' => 'required|email|exists:users,email',
@@ -60,8 +60,8 @@ class AuthenticatedSessionController extends Controller
                 ]);
             }
 
-            // Check if user is active
-            if ($user->status !== 'active') {
+            // Check if user can access system (handles active/pending status properly)
+            if (!$user->canAccessSystem() && !$user->isPending()) {
                 throw ValidationException::withMessages([
                     'email' => ['Your account is not active. Please contact your administrator.'],
                 ]);
@@ -76,11 +76,14 @@ class AuthenticatedSessionController extends Controller
                 ]);
             }
 
-            return redirect()->route('login')
-                ->with('otp_sent', true)
-                ->with('email', $email)
-                ->with('success', 'OTP sent to your email address.')
-                ->with('expires_at', $result['expires_at'] ?? null);
+            return Inertia::render('auth/Login', [
+                'otp_sent' => true,
+                'email' => $email,
+                'success' => 'OTP sent to your email address.',
+                'expires_at' => $result['expires_at'] ?? null,
+                'otpStep' => 'verify',
+                'otpEmail' => $email,
+            ]);
 
         } catch (ValidationException $e) {
             throw $e;
@@ -129,8 +132,8 @@ class AuthenticatedSessionController extends Controller
                 ]);
             }
 
-            // Verify the OTP using your existing OtpService
-            $result = $this->otpService->verifyOtp($user, $otp);
+            // Use the enhanced OTP verification method that handles status changes
+            $result = $this->otpService->verifyOtpAndLogin($user, $otp);
 
             if (!$result['success']) {
                 RateLimiter::hit($key, 60);
@@ -143,14 +146,13 @@ class AuthenticatedSessionController extends Controller
                 ]);
             }
 
+            $user = $result['user']; // Get the fresh user instance
+
             // Clear rate limiter on successful verification
             RateLimiter::clear($key);
 
             // Log the user in
             Auth::login($user, $request->boolean('remember'));
-
-            // Update last login
-            $user->update(['last_login_at' => now()]);
 
             // Set tenant context if user has company
             if ($user->company_id) {
@@ -233,8 +235,8 @@ class AuthenticatedSessionController extends Controller
                 ]);
             }
 
-            // Check if user is active
-            if ($user->status !== 'active') {
+            // Check if user can access system (handles active/pending status properly)
+            if (!$user->canAccessSystem() && !$user->isPending()) {
                 throw ValidationException::withMessages([
                     'email' => ['Your account is not active. Please contact your administrator.'],
                 ]);

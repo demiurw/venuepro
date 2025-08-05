@@ -4,7 +4,10 @@
       "Bash(php artisan tinker:*)",
       "Bash(php artisan config:clear:*)",
       "Bash(php artisan:*)",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "Bash(mkdir:*)",
+      "Bash(npm run build:*)",
+      "Bash(cp:*)"
     ],
     "deny": []
   }

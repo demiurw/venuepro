@@ -69,7 +69,8 @@ class SetTenantFromUser
             Log::debug('Tenant set for authenticated user', [
                 'user_id' => $user->id,
                 'company_id' => $tenant->id,
-                'company_name' => $tenant->name ?? 'Unknown'
+                'company_name' => $tenant->name ?? 'Unknown',
+                'user_type' => $user->user_type
             ]);
         } catch (\Exception $e) {
             Log::error('Failed to set tenant as current', [

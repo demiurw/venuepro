@@ -59,7 +59,7 @@
                     <!-- User Dropdown -->
                     <div class="hidden sm:flex sm:items-center sm:ml-6">
                         <!-- Quick Actions (if any) -->
-                        <div v-if="user.permissions.quick_actions.length > 0" class="mr-4 flex items-center space-x-2">
+                        <div v-if="user.permissions.quick_actions && Array.isArray(user.permissions.quick_actions) && user.permissions.quick_actions.length > 0" class="mr-4 flex items-center space-x-2">
                             <Link
                                 v-for="action in user.permissions.quick_actions.slice(0, 2)"
                                 :key="action.route"

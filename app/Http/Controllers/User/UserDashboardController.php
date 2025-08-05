@@ -36,6 +36,11 @@ class UserDashboardController extends Controller
         return Inertia::render('User/Bookings');
     }
 
+    public function createBooking(): Response
+    {
+        return Inertia::render('User/CreateBooking');
+    }
+
     public function calendar(): Response
     {
         return Inertia::render('User/Calendar');

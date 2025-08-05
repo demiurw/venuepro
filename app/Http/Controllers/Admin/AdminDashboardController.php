@@ -46,6 +46,11 @@ class AdminDashboardController extends Controller
         return Inertia::render('Admin/Rooms');
     }
 
+    public function createRoom(): Response
+    {
+        return Inertia::render('Admin/CreateRoom');
+    }
+
     public function users(): Response
     {
         return Inertia::render('Admin/Users');

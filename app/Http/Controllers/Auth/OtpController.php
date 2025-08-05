@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\OtpRequest;
 use App\Services\Auth\OtpService;
 use App\Models\User;
+use App\Enums\UserStatus;
 use App\Http\Middleware\DashboardRedirectMiddleware;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -79,28 +80,35 @@ class OtpController extends Controller
             ]);
         }
 
-        $result = $this->otpService->verifyOtp($user, $request->otp_code);
+        // Use the enhanced OTP verification method that handles status changes
+        $result = $this->otpService->verifyOtpAndLogin($user, $request->otp_code);
 
         if ($result['success']) {
+            $user = $result['user']; // Get the fresh user instance
+
             // Log the user in
             Auth::login($user, $request->boolean('remember'));
 
             // Regenerate session for security
             $request->session()->regenerate();
 
-            // Update last login timestamp
-            $user->update(['last_login_at' => now()]);
-
             Log::info('User logged in via OTP', [
                 'user_id' => $user->id,
                 'email' => $user->email,
                 'ip' => $request->ip(),
-                'user_type' => $user->user_type
+                'user_type' => $user->user_type,
+                'final_status' => $user->status->value
             ]);
 
-            // Redirect based on user status and role
-            if ($user->isPending()) {
-                return redirect()->route('verification.notice');
+            // Refresh user instance to get latest status after OTP verification
+            $user = $user->fresh();
+            
+            // All users should be active at this point, but check just in case
+            if (!$user->canAccessSystem()) {
+                Auth::logout();
+                return redirect()->route('verification.notice')->with([
+                    'message' => 'Your account requires verification or is not active.'
+                ]);
             }
 
             // Use the role-based dashboard redirection
@@ -118,6 +126,15 @@ class OtpController extends Controller
         // Handle different error cases
         $errorKey = 'otp_code';
         $errorMessage = $result['message'];
+
+        // Handle account inactive specifically
+        if (isset($result['account_inactive'])) {
+            return back()->with([
+                'step' => 'request',
+                'status' => 'error',
+                'message' => $errorMessage
+            ]);
+        }
 
         if (isset($result['max_attempts_exceeded'])) {
             return back()->with([

@@ -18,8 +18,11 @@ class HodDashboardController extends Controller
             'user' => $user,
             'stats' => [
                 'team_members' => \App\Models\User::where('group_id', $user->group_id)->count(),
-                'department_bookings' => \App\Models\Booking::where('user_id', $user->id)
-                    ->orWhereHas('user', function($q) use ($user) {
+                'department_bookings' => \App\Models\Booking::where('created_by', $user->id)
+                    ->orWhereHas('creator', function($q) use ($user) {
+                        $q->where('group_id', $user->group_id);
+                    })
+                    ->orWhereHas('bookedForUser', function($q) use ($user) {
                         $q->where('group_id', $user->group_id);
                     })
                     ->where('start_time', '>=', now())

@@ -33,7 +33,11 @@ class RoleAccessMiddleware
         $user = Auth::user();
 
         // Check if user account is active
-        if ($user->status !== 'active') {
+        if (!$user->isActive()) {
+            if ($user->isPending()) {
+                return redirect()->route('verification.notice')
+                    ->with('error', 'Your account requires verification.');
+            }
             return redirect()->route('account.pending')
                 ->with('error', 'Your account is not yet active. Please contact your administrator.');
         }
@@ -67,8 +71,17 @@ class RoleAccessMiddleware
      */
     private function handleUnauthorizedAccess($user): Response
     {
-        // Redirect to user's appropriate dashboard
-        $dashboardRoute = DashboardRedirectMiddleware::getUserDashboardRoute($user);
+        // Redirect to user's appropriate dashboard based on their user type
+        $dashboardRoutes = [
+            'venuepro_admin' => '/venuepro-admin/dashboard',
+            'system_admin' => '/admin/dashboard',
+            'hod' => '/hod/dashboard',
+            'booking_agent' => '/agent/dashboard',
+            'invitee' => '/user/dashboard',
+            'external' => '/external/dashboard',
+        ];
+
+        $dashboardRoute = $dashboardRoutes[$user->user_type] ?? '/user/dashboard';
 
         return redirect($dashboardRoute)
             ->with('error', 'You do not have permission to access that area.');
@@ -79,7 +92,7 @@ class RoleAccessMiddleware
      */
     public static function userCanAccess($user, string $routePattern): bool
     {
-        if ($user->status !== 'active') {
+        if (!$user->isActive()) {
             return false;
         }
 
@@ -92,7 +105,7 @@ class RoleAccessMiddleware
      */
     public static function getAccessibleRoutes($user): array
     {
-        if ($user->status !== 'active') {
+        if (!$user->isActive()) {
             return [];
         }
 

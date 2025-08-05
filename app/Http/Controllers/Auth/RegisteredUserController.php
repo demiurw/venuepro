@@ -9,6 +9,7 @@ use App\Models\Role;
 use App\Models\OtpAttempt;
 use App\Services\Auth\OtpService;
 use App\Http\Middleware\DashboardRedirectMiddleware;
+use App\Enums\UserStatus;
 use Illuminate\Auth\Events\Registered;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -204,7 +205,7 @@ class RegisteredUserController extends Controller
             'role_id' => $role->id,
             'user_type' => 'system_admin', // First user becomes system admin
             'auth_method' => 'otp', // Force OTP-only authentication
-            'status' => 'active', // User is active since OTP is already verified
+            'status' => UserStatus::ACTIVE, // User is active since OTP is already verified
             'email_verified_at' => now(), // Mark email as verified
         ]);
     }

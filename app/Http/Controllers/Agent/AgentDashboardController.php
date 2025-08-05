@@ -37,6 +37,11 @@ class AgentDashboardController extends Controller
         return Inertia::render('Agent/Bookings');
     }
 
+    public function createBooking(): Response
+    {
+        return Inertia::render('Agent/CreateBooking');
+    }
+
     public function calendar(): Response
     {
         return Inertia::render('Agent/Calendar');
@@ -45,5 +50,10 @@ class AgentDashboardController extends Controller
     public function clients(): Response
     {
         return Inertia::render('Agent/Clients');
+    }
+
+    public function createClient(): Response
+    {
+        return Inertia::render('Agent/CreateClient');
     }
 }

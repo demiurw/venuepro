@@ -9,6 +9,7 @@ use App\Http\Controllers\Auth\PasswordResetLinkController;
 use App\Http\Controllers\Auth\RegisteredUserController;
 use App\Http\Controllers\Auth\VerifyEmailController;
 use App\Http\Controllers\Auth\OtpController;
+use App\Http\Controllers\Auth\OtpVerificationController;
 use App\Http\Controllers\Auth\SocialiteController;
 use Illuminate\Support\Facades\Route;
 
@@ -34,7 +35,7 @@ Route::middleware('guest')->group(function () {
     // For OTP-only system, POST /login now handles the email submission step
     Route::post('login', [AuthenticatedSessionController::class, 'requestOtp'])
         ->name('login.submit')
-        ->middleware('throttle:3,1');
+        ->middleware('throttle:10,1');
 
     // OTP verification endpoint
     Route::post('login/verify', [AuthenticatedSessionController::class, 'store'])
@@ -65,8 +66,24 @@ Route::middleware('guest')->group(function () {
         ->middleware('throttle:2,1');
 
     // Account Verification Routes (for new user registration)
-    Route::post('verify-account/generate', [OtpController::class, 'generateForVerification'])
+    Route::get('verification', [OtpVerificationController::class, 'show'])
+        ->name('verification.show');
+
+    Route::post('verification/generate', [OtpVerificationController::class, 'generate'])
         ->name('verification.generate')
+        ->middleware('throttle:3,1');
+
+    Route::post('verification/verify', [OtpVerificationController::class, 'verify'])
+        ->name('verification.verify')
+        ->middleware('throttle:5,1');
+
+    Route::post('verification/resend', [OtpVerificationController::class, 'resend'])
+        ->name('verification.resend')
+        ->middleware('throttle:2,1');
+
+    // Legacy routes for backward compatibility
+    Route::post('verify-account/generate', [OtpController::class, 'generateForVerification'])
+        ->name('verification.generate.legacy')
         ->middleware('throttle:3,1');
 
     Route::post('verify-account/verify', [OtpController::class, 'verifyForActivation'])
@@ -98,13 +115,29 @@ Route::middleware('guest')->group(function () {
 });
 
 Route::middleware('auth')->group(function () {
-    // Email verification routes (still needed for new accounts)
-    Route::get('verify-email', EmailVerificationPromptController::class)
+    // Account verification notice
+    Route::get('verification/notice', [OtpVerificationController::class, 'notice'])
         ->name('verification.notice');
+
+    // User status management (admin-only)
+    Route::post('verification/activate', [OtpVerificationController::class, 'activate'])
+        ->name('verification.activate')
+        ->middleware('can:manage-users');
+
+    Route::post('verification/deactivate', [OtpVerificationController::class, 'deactivate'])
+        ->name('verification.deactivate')
+        ->middleware('can:manage-users');
+
+    Route::get('verification/status', [OtpVerificationController::class, 'status'])
+        ->name('verification.status');
+
+    // Legacy email verification routes (still needed for new accounts)
+    Route::get('verify-email', EmailVerificationPromptController::class)
+        ->name('verification.notice.legacy');
 
     Route::get('verify-email/{id}/{hash}', VerifyEmailController::class)
         ->middleware(['signed', 'throttle:6,1'])
-        ->name('verification.verify');
+        ->name('verification.verify.email');
 
     Route::post('email/verification-notification', [EmailVerificationNotificationController::class, 'store'])
         ->middleware('throttle:6,1')

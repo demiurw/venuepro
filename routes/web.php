@@ -1,8 +1,11 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\Auth;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\Admin\AdminDashboardController;
+use App\Http\Controllers\Admin\CompanyUserController;
+use App\Http\Controllers\Admin\CompanyGroupController;
 use App\Http\Controllers\Hod\HodDashboardController;
 use App\Http\Controllers\Agent\AgentDashboardController;
 use App\Http\Controllers\User\UserDashboardController;
@@ -22,9 +25,17 @@ Route::get('/', function () {
     return Inertia::render('Welcome');
 })->name('home');
 
-// Account pending route for inactive users
+// Account pending route for inactive users - redirect active users to dashboard
 Route::get('/account/pending', function () {
-    return Inertia::render('Auth/AccountPending');
+    $user = Auth::user();
+    
+    // Redirect active users to their proper dashboard
+    if ($user && $user->isActive()) {
+        $dashboardRoute = DashboardRedirectMiddleware::getUserDashboardRoute($user);
+        return redirect($dashboardRoute);
+    }
+    
+    return Inertia::render('auth/AccountPending');
 })->name('account.pending')->middleware('auth');
 
 // Generic dashboard route - will redirect based on user role
@@ -48,7 +59,10 @@ Route::middleware([
 
     // Add other VenuePro admin routes here
     Route::get('/companies', [VenueProAdminDashboardController::class, 'companies'])->name('companies');
+    Route::get('/companies/create', [VenueProAdminDashboardController::class, 'createCompany'])->name('companies.create');
     Route::get('/system-settings', [VenueProAdminDashboardController::class, 'systemSettings'])->name('system-settings');
+    Route::get('/system/health', [VenueProAdminDashboardController::class, 'systemHealth'])->name('system.health');
+    Route::get('/reports', [VenueProAdminDashboardController::class, 'globalReports'])->name('reports');
     Route::get('/analytics', [VenueProAdminDashboardController::class, 'analytics'])->name('analytics');
 });
 
@@ -64,10 +78,20 @@ Route::middleware([
     // Company management
     Route::get('/buildings', [AdminDashboardController::class, 'buildings'])->name('buildings');
     Route::get('/rooms', [AdminDashboardController::class, 'rooms'])->name('rooms');
-    Route::get('/users', [AdminDashboardController::class, 'users'])->name('users');
-    Route::get('/groups', [AdminDashboardController::class, 'groups'])->name('groups');
+    Route::get('/rooms/create', [AdminDashboardController::class, 'createRoom'])->name('rooms.create');
     Route::get('/reports', [AdminDashboardController::class, 'reports'])->name('reports');
     Route::get('/settings', [AdminDashboardController::class, 'settings'])->name('settings');
+    
+    // User Management Routes
+    Route::resource('users', CompanyUserController::class);
+    Route::post('users/{user}/resend-otp', [CompanyUserController::class, 'resendOtp'])->name('users.resend-otp');
+    Route::post('users/{user}/reactivate', [CompanyUserController::class, 'reactivate'])->name('users.reactivate');
+    
+    // Group Management Routes
+    Route::resource('groups', CompanyGroupController::class);
+    Route::post('groups/{group}/members', [CompanyGroupController::class, 'addMembers'])->name('groups.add-members');
+    Route::delete('groups/{group}/members', [CompanyGroupController::class, 'removeMembers'])->name('groups.remove-members');
+    Route::patch('groups/{group}/members/{user}', [CompanyGroupController::class, 'updateMemberRole'])->name('groups.update-member-role');
 });
 
 // Head of Department Routes
@@ -97,8 +121,10 @@ Route::middleware([
 
     // Booking management
     Route::get('/bookings', [AgentDashboardController::class, 'bookings'])->name('bookings');
+    Route::get('/bookings/create', [AgentDashboardController::class, 'createBooking'])->name('bookings.create');
     Route::get('/calendar', [AgentDashboardController::class, 'calendar'])->name('calendar');
     Route::get('/clients', [AgentDashboardController::class, 'clients'])->name('clients');
+    Route::get('/clients/create', [AgentDashboardController::class, 'createClient'])->name('clients.create');
 });
 
 // User Routes (for invitees and general users)
@@ -112,6 +138,7 @@ Route::middleware([
 
     // User features
     Route::get('/bookings', [UserDashboardController::class, 'bookings'])->name('bookings');
+    Route::get('/bookings/create', [UserDashboardController::class, 'createBooking'])->name('bookings.create');
     Route::get('/calendar', [UserDashboardController::class, 'calendar'])->name('calendar');
     Route::get('/profile', [UserDashboardController::class, 'profile'])->name('profile');
 });
@@ -128,6 +155,7 @@ Route::middleware([
     // Limited external features
     Route::get('/bookings', [ExternalDashboardController::class, 'bookings'])->name('bookings');
     Route::get('/requests', [ExternalDashboardController::class, 'requests'])->name('requests');
+    Route::get('/requests/create', [ExternalDashboardController::class, 'createRequest'])->name('requests.create');
 });
 
 // Shared routes accessible to all authenticated users
@@ -149,6 +177,7 @@ Route::middleware([
         ]);
     });
 });
+
 
 // Auth routes should remain accessible for tenants to log in
 require __DIR__.'/auth.php';

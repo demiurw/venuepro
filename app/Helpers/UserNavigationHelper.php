@@ -20,8 +20,8 @@ class UserNavigationHelper
             ['name' => 'Dashboard', 'route' => 'admin.dashboard', 'icon' => 'dashboard'],
             ['name' => 'Buildings', 'route' => 'admin.buildings', 'icon' => 'building'],
             ['name' => 'Rooms', 'route' => 'admin.rooms', 'icon' => 'room'],
-            ['name' => 'Users', 'route' => 'admin.users', 'icon' => 'people'],
-            ['name' => 'Groups', 'route' => 'admin.groups', 'icon' => 'group'],
+            ['name' => 'User Management', 'route' => 'admin.users.index', 'icon' => 'users'],
+            ['name' => 'Groups', 'route' => 'admin.groups.index', 'icon' => 'group'],
             ['name' => 'Reports', 'route' => 'admin.reports', 'icon' => 'assessment'],
             ['name' => 'Settings', 'route' => 'admin.settings', 'icon' => 'settings'],
         ],
@@ -153,8 +153,8 @@ class UserNavigationHelper
             // Admin routes
             'admin.buildings' => ['name' => 'Buildings', 'parent' => 'admin.dashboard'],
             'admin.rooms' => ['name' => 'Rooms', 'parent' => 'admin.dashboard'],
-            'admin.users' => ['name' => 'Users', 'parent' => 'admin.dashboard'],
-            'admin.groups' => ['name' => 'Groups', 'parent' => 'admin.dashboard'],
+            'admin.users.index' => ['name' => 'Users', 'parent' => 'admin.dashboard'],
+            'admin.groups.index' => ['name' => 'Groups', 'parent' => 'admin.dashboard'],
             'admin.reports' => ['name' => 'Reports', 'parent' => 'admin.dashboard'],
             'admin.settings' => ['name' => 'Settings', 'parent' => 'admin.dashboard'],
 
@@ -244,12 +244,14 @@ class UserNavigationHelper
      */
     public static function getUserPermissionsSummary(User $user): array
     {
+        $quickActions = self::getQuickActions($user);
+        
         $summary = [
             'user_type' => $user->user_type,
             'display_name' => self::getUserTypeDisplayName($user),
             'navigation' => self::getNavigationMenu($user),
             'dashboard_route' => self::getDashboardRoute($user->user_type),
-            'quick_actions' => self::getQuickActions($user),
+            'quick_actions' => is_array($quickActions) ? $quickActions : [],
             'can_manage_users' => self::canAccessFeature($user, 'manage_users'),
             'can_manage_bookings' => self::canAccessFeature($user, 'manage_bookings'),
             'can_view_reports' => self::canAccessFeature($user, 'view_reports'),

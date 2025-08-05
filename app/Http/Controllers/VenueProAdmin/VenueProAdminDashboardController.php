@@ -31,9 +31,24 @@ class VenueProAdminDashboardController extends Controller
         return Inertia::render('VenueProAdmin/Companies');
     }
 
+    public function createCompany(): Response
+    {
+        return Inertia::render('VenueProAdmin/CreateCompany');
+    }
+
     public function systemSettings(): Response
     {
         return Inertia::render('VenueProAdmin/SystemSettings');
+    }
+
+    public function systemHealth(): Response
+    {
+        return Inertia::render('VenueProAdmin/SystemHealth');
+    }
+
+    public function globalReports(): Response
+    {
+        return Inertia::render('VenueProAdmin/GlobalReports');
     }
 
     public function analytics(): Response

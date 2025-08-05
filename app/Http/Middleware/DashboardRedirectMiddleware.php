@@ -5,6 +5,7 @@ namespace App\Http\Middleware;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use App\Enums\UserStatus;
 use Symfony\Component\HttpFoundation\Response;
 
 class DashboardRedirectMiddleware
@@ -53,8 +54,11 @@ class DashboardRedirectMiddleware
     private function getDashboardRoute($user): ?string
     {
         // Check user status first
-        if ($user->status !== 'active') {
-            return '/account/pending';
+        if (!$user->isActive()) {
+            if ($user->isPending()) {
+                return '/verification/notice';
+            }
+            return '/account/inactive';
         }
 
         // Get user type and return corresponding dashboard
@@ -68,7 +72,7 @@ class DashboardRedirectMiddleware
      */
     public static function hasAccessToDashboard($user, string $dashboardType): bool
     {
-        if ($user->status !== 'active') {
+        if (!$user->isActive()) {
             return false;
         }
 
@@ -83,8 +87,11 @@ class DashboardRedirectMiddleware
      */
     public static function getUserDashboardRoute($user): string
     {
-        if ($user->status !== 'active') {
-            return '/account/pending';
+        if (!$user->isActive()) {
+            if ($user->isPending()) {
+                return '/verification/notice';
+            }
+            return '/account/inactive';
         }
 
         return self::DASHBOARD_ROUTES[$user->user_type] ?? '/user/dashboard';

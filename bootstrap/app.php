@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Middleware\DashboardRedirectMiddleware;
+use App\Http\Middleware\EnsureUserStatusMiddleware;
 use App\Http\Middleware\HandleAppearance;
 use App\Http\Middleware\HandleInertiaRequests;
 use App\Http\Middleware\RoleAccessMiddleware;
@@ -29,6 +30,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'tenant' => SetTenantFromUser::class,
             'dashboard.redirect' => DashboardRedirectMiddleware::class,
             'role.access' => RoleAccessMiddleware::class,
+            'user.status' => EnsureUserStatusMiddleware::class,
         ]);
     })
     ->withProviders([

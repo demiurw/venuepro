@@ -5,8 +5,10 @@ namespace App\Services\Auth;
 use App\Models\User;
 use App\Models\OtpAttempt;
 use App\Mail\OtpMail;
+use App\Enums\UserStatus;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
 
 class OtpService
@@ -453,11 +455,11 @@ class OtpService
             }
 
             // Check if user account is active (allow pending users for account verification)
-            if ($user->status !== 'active' && !($user->status === 'pending' && $purpose === 'account_verification')) {
+            if (!$user->isActive() && !($user->isPending() && $purpose === 'account_verification')) {
                 Log::warning('OTP generation attempted for inactive user', [
                     'user_id' => $user->id,
                     'email' => $email,
-                    'status' => $user->status,
+                    'status' => $user->status->value,
                     'purpose' => $purpose
                 ]);
 
@@ -481,6 +483,195 @@ class OtpService
             return [
                 'success' => false,
                 'message' => 'Failed to process your request. Please try again.'
+            ];
+        }
+    }
+
+    /**
+     * Verify OTP and activate user account (for registration workflow)
+     */
+    public function verifyOtpAndActivateUser(string $email, string $otpCode): array
+    {
+        try {
+            Log::info('OTP verification and user activation started', [
+                'email' => $email,
+                'provided_otp' => $otpCode
+            ]);
+
+            // Use database transaction for consistency
+            return DB::transaction(function () use ($email, $otpCode) {
+                // First verify the OTP for this email
+                $otpResult = $this->verifyOtpForEmail($email, $otpCode);
+                
+                if (!$otpResult['success']) {
+                    return $otpResult;
+                }
+
+                // Find the user
+                $user = User::where('email', $email)->first();
+                
+                if (!$user) {
+                    Log::error('User not found during activation', [
+                        'email' => $email
+                    ]);
+                    
+                    return [
+                        'success' => false,
+                        'message' => 'User account not found.'
+                    ];
+                }
+
+                // Check if user is in pending status
+                if (!$user->isPending()) {
+                    Log::warning('Activation attempted for non-pending user', [
+                        'user_id' => $user->id,
+                        'email' => $email,
+                        'current_status' => $user->status->value
+                    ]);
+                    
+                    return [
+                        'success' => false,
+                        'message' => 'User account is not pending activation.'
+                    ];
+                }
+
+                // Activate the user
+                $activated = $user->activate();
+                
+                if (!$activated) {
+                    Log::error('Failed to activate user account', [
+                        'user_id' => $user->id,
+                        'email' => $email
+                    ]);
+                    
+                    return [
+                        'success' => false,
+                        'message' => 'Failed to activate account. Please try again.'
+                    ];
+                }
+
+                // Update the OTP attempt record with user_id and company_id if needed
+                if (isset($otpResult['otp_attempt_id'])) {
+                    OtpAttempt::where('id', $otpResult['otp_attempt_id'])
+                        ->update([
+                            'user_id' => $user->id,
+                            'company_id' => $user->company_id
+                        ]);
+                }
+
+                Log::info('User account activated successfully via OTP', [
+                    'user_id' => $user->id,
+                    'email' => $email,
+                    'company_id' => $user->company_id
+                ]);
+
+                return [
+                    'success' => true,
+                    'message' => 'Account activated successfully.',
+                    'user' => $user->fresh(),
+                ];
+            });
+
+        } catch (\Exception $e) {
+            Log::error('OTP verification and activation failed', [
+                'email' => $email,
+                'provided_otp' => $otpCode,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return [
+                'success' => false,
+                'message' => 'Account activation failed. Please try again.'
+            ];
+        }
+    }
+
+    /**
+     * Verify OTP for existing user and handle login workflow
+     */
+    public function verifyOtpAndLogin(User $user, string $otpCode): array
+    {
+        try {
+            Log::info('OTP verification for login started', [
+                'user_id' => $user->id,
+                'email' => $user->email,
+                'current_status' => $user->status->value
+            ]);
+
+            // Verify the OTP
+            $otpResult = $this->verifyOtp($user, $otpCode);
+            
+            if (!$otpResult['success']) {
+                return $otpResult;
+            }
+
+            // Check user status and handle accordingly
+            if ($user->isPending()) {
+                // For pending users, activate them on successful OTP verification
+                $activated = $user->activate();
+                
+                if ($activated) {
+                    // Refresh the user instance to get the updated status
+                    $user = $user->fresh();
+                    
+                    Log::info('User activated during login process', [
+                        'user_id' => $user->id,
+                        'email' => $user->email,
+                        'new_status' => $user->status->value
+                    ]);
+                } else {
+                    Log::error('Failed to activate user during login', [
+                        'user_id' => $user->id,
+                        'email' => $user->email
+                    ]);
+                    
+                    return [
+                        'success' => false,
+                        'message' => 'Failed to activate account. Please contact support.',
+                        'activation_failed' => true
+                    ];
+                }
+            } else if (!$user->canAccessSystem()) {
+                Log::warning('Login attempted for inactive user', [
+                    'user_id' => $user->id,
+                    'email' => $user->email,
+                    'status' => $user->status->value
+                ]);
+                
+                return [
+                    'success' => false,
+                    'message' => 'Your account is not active. Please contact support.',
+                    'account_inactive' => true
+                ];
+            }
+
+            // Record successful login
+            $user->recordSuccessfulLogin();
+
+            Log::info('OTP verification and login successful', [
+                'user_id' => $user->id,
+                'email' => $user->email,
+                'final_status' => $user->fresh()->status->value
+            ]);
+
+            return [
+                'success' => true,
+                'message' => 'Login successful.',
+                'user' => $user->fresh(),
+            ];
+
+        } catch (\Exception $e) {
+            Log::error('OTP verification and login failed', [
+                'user_id' => $user->id,
+                'email' => $user->email,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return [
+                'success' => false,
+                'message' => 'Login verification failed. Please try again.'
             ];
         }
     }
