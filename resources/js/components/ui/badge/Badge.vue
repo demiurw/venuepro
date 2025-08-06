@@ -1,5 +1,5 @@
 <template>
-  <div :class="badgeVariants({ variant, size, class: props.class })">
+  <div :class="badgeVariants({ variant: props.variant, size: props.size, class: props.class })">
     <slot />
   </div>
 </template>
@@ -41,5 +41,8 @@ export interface BadgeProps extends /* @vue-ignore */ VariantProps<typeof badgeV
   class?: any
 }
 
-const props = withDefaults(defineProps<BadgeProps>(), {})
+const props = withDefaults(defineProps<BadgeProps>(), {
+  variant: 'default',
+  size: 'default',
+})
 </script>

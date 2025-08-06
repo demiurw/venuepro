@@ -22,9 +22,19 @@ class CompanyGroupController extends Controller
     protected $allowedMemberTypes = ['booking_agent', 'invitee', 'hod'];
 
     /**
-     * Allowed roles within groups
+     * Get user type display name
      */
-    protected $allowedGroupRoles = ['member', 'manager', 'admin'];
+    private function getUserTypeDisplayName($userType): string
+    {
+        return match($userType) {
+            'hod' => 'Head of Department',
+            'booking_agent' => 'Booking Agent',
+            'invitee' => 'Invitee',
+            'system_admin' => 'System Admin',
+            'external' => 'External User',
+            default => ucfirst(str_replace('_', ' ', $userType))
+        };
+    }
 
     public function __construct()
     {
@@ -102,7 +112,6 @@ class CompanyGroupController extends Controller
     {
         return Inertia::render('Admin/Groups/Create', [
             'allowedMemberTypes' => $this->allowedMemberTypes,
-            'allowedGroupRoles' => $this->allowedGroupRoles,
         ]);
     }
 
@@ -188,16 +197,21 @@ class CompanyGroupController extends Controller
             'members' => function ($query) {
                 $query->orderBy('group_member.created_at', 'desc');
             },
-            'members.role',
             'accessControls.resource'
         ]);
+
+        // Add display names to members
+        $group->members->each(function ($member) {
+            $member->user_type_display_name = $this->getUserTypeDisplayName($member->user_type);
+        });
 
         // Get group statistics
         $groupStats = [
             'total_members' => $group->members->count(),
             'active_members' => $group->members->where('status', 'active')->count(),
-            'managers' => $group->members->where('pivot.role', 'manager')->count(),
-            'admins' => $group->members->where('pivot.role', 'admin')->count(),
+            'hods' => $group->members->where('user_type', 'hod')->count(),
+            'booking_agents' => $group->members->where('user_type', 'booking_agent')->count(),
+            'invitees' => $group->members->where('user_type', 'invitee')->count(),
             'access_controls' => $group->accessControls->count(),
         ];
 
@@ -208,13 +222,16 @@ class CompanyGroupController extends Controller
             ->where('status', 'active')
             ->select(['id', 'first_name', 'last_name', 'email', 'user_type'])
             ->orderBy('first_name')
-            ->get();
+            ->get()
+            ->map(function ($user) {
+                $user->user_type_display_name = $this->getUserTypeDisplayName($user->user_type);
+                return $user;
+            });
 
         return Inertia::render('Admin/Groups/Show', [
             'group' => $group,
             'groupStats' => $groupStats,
             'availableUsers' => $availableUsers,
-            'allowedGroupRoles' => $this->allowedGroupRoles,
         ]);
     }
 
@@ -375,7 +392,6 @@ class CompanyGroupController extends Controller
                                  ->where('status', 'active');
                 })
             ],
-            'role' => ['required', 'string', Rule::in($this->allowedGroupRoles)],
         ]);
 
         try {
@@ -395,7 +411,6 @@ class CompanyGroupController extends Controller
                 // Add user to group
                 $group->members()->attach($userId, [
                     'company_id' => $user->company_id,
-                    'role' => $validated['role'],
                     'added_by' => $user->id,
                     'created_at' => now(),
                     'updated_at' => now(),
@@ -412,7 +427,6 @@ class CompanyGroupController extends Controller
                     'group_id' => $group->id,
                     'group_name' => $group->name,
                     'added_users' => $addedUsers,
-                    'role' => $validated['role'],
                     'added_by' => $user->id,
                 ]);
             }
@@ -518,56 +532,7 @@ class CompanyGroupController extends Controller
     }
 
     /**
-     * Update a member's role in the group
+     * Update member role method removed - groups no longer have member-specific roles.
+     * Users only have system-wide roles (hod, booking_agent, invitee, etc.).
      */
-    public function updateMemberRole(Request $request, Group $group, User $member): RedirectResponse
-    {
-        $user = auth()->user();
-        
-        // Ensure the group belongs to the same company
-        if ($group->company_id !== $user->company_id) {
-            abort(403, 'Group not found or access denied.');
-        }
-
-        // Ensure the member belongs to the same company and is in the group
-        if ($member->company_id !== $user->company_id || 
-            !$group->members()->where('user_id', $member->id)->exists()) {
-            abort(403, 'Member not found or access denied.');
-        }
-
-        // Validate the request
-        $validated = $request->validate([
-            'role' => ['required', 'string', Rule::in($this->allowedGroupRoles)],
-        ]);
-
-        try {
-            // Update member's role in the group
-            $group->members()->updateExistingPivot($member->id, [
-                'role' => $validated['role'],
-                'updated_at' => now(),
-            ]);
-
-            Log::info('Group member role updated by system admin', [
-                'group_id' => $group->id,
-                'member_id' => $member->id,
-                'new_role' => $validated['role'],
-                'updated_by' => $user->id,
-            ]);
-
-            return redirect()->route('admin.groups.show', $group)
-                ->with('success', "Role updated successfully for {$member->full_name}.");
-
-        } catch (\Exception $e) {
-            Log::error('Failed to update member role', [
-                'error' => $e->getMessage(),
-                'group_id' => $group->id,
-                'member_id' => $member->id,
-                'updated_by' => $user->id
-            ]);
-
-            return back()->withErrors([
-                'role' => 'Failed to update member role. Please try again.'
-            ]);
-        }
-    }
 }

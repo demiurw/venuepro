@@ -63,8 +63,27 @@ export interface Group {
     name: string;
     description?: string;
     company_id: number;
+    status: 'active' | 'inactive';
+    member_count: number;
+    active_members?: number;
+    total_bookings?: number;
     created_at: string;
     updated_at: string;
+    member_breakdown?: {
+        admins: number;
+        managers: number;
+        members: number;
+    };
+}
+
+// Group member information - no longer has group-specific roles
+export interface GroupMember {
+    user_id: number;
+    group_id: number;
+    added_at: string;
+    added_by_id: number;
+    user: User;
+    added_by?: User;
 }
 
 // Role information

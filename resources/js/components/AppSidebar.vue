@@ -80,6 +80,14 @@ const quickAccessItems = computed<NavItem[]>(() => {
             icon: Users,
             badge: undefined,
         });
+        
+        // Add Group Management for system_admin users
+        items.push({
+            title: 'Group Management',
+            href: route('admin.groups.index'),
+            icon: Users2,
+            badge: undefined,
+        });
     }
     
     if (user?.permissions?.quick_actions && Array.isArray(user.permissions.quick_actions)) {

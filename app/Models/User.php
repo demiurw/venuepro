@@ -258,13 +258,36 @@ class User extends Authenticatable implements MustVerifyEmail
     }
 
     /**
-     * Relationship: User has many bookings.
+     * Relationship: User has many bookings they created.
      *
      * @return \Illuminate\Database\Eloquent\Relations\HasMany
      */
     public function bookings()
     {
-        return $this->hasMany(Booking::class);
+        return $this->hasMany(Booking::class, 'created_by');
+    }
+
+    /**
+     * Relationship: User has many bookings made for them.
+     *
+     * @return \Illuminate\Database\Eloquent\Relations\HasMany
+     */
+    public function bookedForBookings()
+    {
+        return $this->hasMany(Booking::class, 'booked_for_user_id');
+    }
+
+    /**
+     * Get all bookings for this user (both created by and booked for).
+     *
+     * @return \Illuminate\Database\Eloquent\Builder
+     */
+    public function allBookings()
+    {
+        return Booking::where(function($query) {
+            $query->where('created_by', $this->id)
+                  ->orWhere('booked_for_user_id', $this->id);
+        });
     }
 
     /**

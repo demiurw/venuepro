@@ -5,7 +5,10 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Models\Role;
+use App\Models\Group;
 use App\Services\Auth\OtpService;
+use App\Services\UserService;
+use App\Http\Requests\Admin\UpdateUserRequest;
 use App\Enums\UserStatus;
 use Illuminate\Http\Request;
 use Illuminate\Http\RedirectResponse;
@@ -18,6 +21,7 @@ use Inertia\Response;
 class CompanyUserController extends Controller
 {
     protected $otpService;
+    protected $userService;
 
     /**
      * Allowed roles that System Admin can assign to users
@@ -33,15 +37,16 @@ class CompanyUserController extends Controller
         'invitee' => 3,
     ];
 
-    public function __construct(OtpService $otpService)
+    public function __construct(OtpService $otpService, UserService $userService)
     {
         $this->otpService = $otpService;
+        $this->userService = $userService;
         
-        // Ensure only system_admin users can access this controller
+        // Ensure only system_admin and hod users can access this controller
         $this->middleware(function ($request, $next) {
             $user = auth()->user();
-            if (!$user || $user->user_type !== 'system_admin') {
-                abort(403, 'Unauthorized access. Only System Administrators can manage company users.');
+            if (!$user || !in_array($user->user_type, ['system_admin', 'hod'])) {
+                abort(403, 'Unauthorized access. Only System Administrators and HODs can manage users.');
             }
             return $next($request);
         });
@@ -53,56 +58,21 @@ class CompanyUserController extends Controller
     public function index(Request $request): Response
     {
         $user = auth()->user();
+        $filters = $request->only(['search', 'role', 'status']);
         
-        // Build query for users in the same company, excluding system_admin and venuepro_admin
-        $query = User::where('company_id', $user->company_id)
-            ->whereIn('user_type', $this->allowedRoles)
-            ->with(['role']);
-
-        // Apply search filter if provided
-        if ($request->filled('search')) {
-            $search = $request->get('search');
-            $query->where(function ($q) use ($search) {
-                $q->where('first_name', 'like', "%{$search}%")
-                  ->orWhere('last_name', 'like', "%{$search}%")
-                  ->orWhere('email', 'like', "%{$search}%");
-            });
-        }
-
-        // Apply role filter if provided
-        if ($request->filled('role')) {
-            $role = $request->get('role');
-            if (in_array($role, $this->allowedRoles)) {
-                $query->where('user_type', $role);
-            }
-        }
-
-        // Apply status filter if provided
-        if ($request->filled('status')) {
-            $status = $request->get('status');
-            $validStatuses = UserStatus::values();
-            if (in_array($status, $validStatuses)) {
-                $query->where('status', $status);
-            }
-        }
-
-        // Order by created date (newest first)
-        $query->orderBy('created_at', 'desc');
-
-        // Paginate results
-        $users = $query->paginate(15)->withQueryString();
-
-        // Get role statistics for dashboard
-        $roleStats = User::where('company_id', $user->company_id)
-            ->whereIn('user_type', $this->allowedRoles)
-            ->selectRaw('user_type, COUNT(*) as count')
-            ->groupBy('user_type')
-            ->pluck('count', 'user_type');
+        // Get paginated users using the service
+        $users = $this->userService->getPaginatedUsers($user, $filters, 15);
+        
+        // Get role statistics
+        $roleStats = $this->userService->getUserStatistics($user);
+        
+        // Get allowed roles for current user
+        $allowedRoles = $this->userService->getAllowedRoles($user);
 
         return Inertia::render('Admin/Users/Index', [
             'users' => $users,
-            'filters' => $request->only(['search', 'role', 'status']),
-            'allowedRoles' => $this->allowedRoles,
+            'filters' => $filters,
+            'allowedRoles' => $allowedRoles,
             'roleStats' => $roleStats,
         ]);
     }
@@ -112,8 +82,17 @@ class CompanyUserController extends Controller
      */
     public function create(): Response
     {
+        $user = auth()->user();
+        
+        // Get available groups and roles using the service
+        $groups = $this->userService->getAvailableGroups($user);
+        $allowedRoles = $this->userService->getAllowedRoles($user);
+        $roleRequirements = $this->userService->getRoleRequirements();
+
         return Inertia::render('Admin/Users/Create', [
-            'allowedRoles' => $this->allowedRoles,
+            'allowedRoles' => $allowedRoles,
+            'groups' => $groups,
+            'roleRequirements' => $roleRequirements,
         ]);
     }
 
@@ -124,8 +103,8 @@ class CompanyUserController extends Controller
     {
         $user = auth()->user();
         
-        // Validate the request
-        $validated = $request->validate([
+        // Define validation rules
+        $rules = [
             'first_name' => 'required|string|max:100',
             'last_name' => 'required|string|max:100',
             'email' => [
@@ -138,7 +117,32 @@ class CompanyUserController extends Controller
                 })
             ],
             'user_type' => ['required', 'string', Rule::in($this->allowedRoles)],
-        ]);
+        ];
+
+        // Add group_id validation - required only for booking_agent and hod roles
+        if (in_array($request->input('user_type'), ['booking_agent', 'hod'])) {
+            $rules['group_id'] = [
+                'required',
+                'integer',
+                Rule::exists('groups', 'id')->where(function ($query) use ($user) {
+                    return $query->where('company_id', $user->company_id)
+                                 ->where('is_active', true);
+                })
+            ];
+        } else {
+            // Optional for other roles (like invitee)
+            $rules['group_id'] = [
+                'nullable',
+                'integer',
+                Rule::exists('groups', 'id')->where(function ($query) use ($user) {
+                    return $query->where('company_id', $user->company_id)
+                                 ->where('is_active', true);
+                })
+            ];
+        }
+        
+        // Validate the request
+        $validated = $request->validate($rules);
 
         try {
             DB::beginTransaction();
@@ -153,6 +157,7 @@ class CompanyUserController extends Controller
                 'email' => $validated['email'],
                 'user_type' => $validated['user_type'],
                 'role_id' => $roleId,
+                'group_id' => $validated['group_id'] ?? null,
                 'company_id' => $user->company_id,
                 'status' => UserStatus::PENDING, // User starts as pending until they complete OTP verification
                 'auth_method' => 'otp',
@@ -206,143 +211,96 @@ class CompanyUserController extends Controller
     }
 
     /**
+     * Show the form for editing a user
+     */
+    public function edit(User $companyUser): Response
+    {
+        $currentUser = auth()->user();
+        
+        // Check if user can be managed by current user using service
+        $user = $this->userService->findManageableUser($currentUser, $companyUser->id);
+        
+        if (!$user) {
+            abort(403, 'User not found or access denied.');
+        }
+
+        // Get available groups and roles using the service
+        $groups = $this->userService->getAvailableGroups($currentUser);
+        $allowedRoles = $this->userService->getAllowedRoles($currentUser);
+        $roleRequirements = $this->userService->getRoleRequirements();
+
+        return Inertia::render('Admin/Users/Edit', [
+            'user' => $user,
+            'allowedRoles' => $allowedRoles,
+            'groups' => $groups,
+            'roleRequirements' => $roleRequirements,
+        ]);
+    }
+
+    /**
      * Display the specified user
      */
     public function show(User $companyUser): Response
     {
         $currentUser = auth()->user();
         
-        // Ensure the user belongs to the same company and has allowed role
-        if ($companyUser->company_id !== $currentUser->company_id || 
-            !in_array($companyUser->user_type, $this->allowedRoles)) {
+        // Check if user can be managed by current user using service
+        $user = $this->userService->findManageableUser($currentUser, $companyUser->id);
+        
+        if (!$user) {
             abort(403, 'User not found or access denied.');
         }
 
-        // Load relationships
-        $companyUser->load(['role', 'groups', 'bookings' => function ($query) {
-            $query->orderBy('created_at', 'desc')->limit(10);
-        }]);
+        // Get user statistics using repository
+        $userStats = $this->userService->getUserBookingStatistics($companyUser->id);
 
-        // Get user statistics
-        $userStats = [
-            'total_bookings' => $companyUser->bookings()->count(),
-            'active_bookings' => $companyUser->bookings()
-                ->where(function($query) {
-                    $query->where('date', '>', now()->toDateString())
-                          ->orWhere(function($q) {
-                              $q->where('date', '=', now()->toDateString())
-                                ->whereTime('start_time', '>=', now()->toTimeString());
-                          });
-                })
-                ->where('status', '!=', 'cancelled')
-                ->count(),
-            'groups_count' => $companyUser->groups()->count(),
-            'last_activity' => $companyUser->last_login_at,
-        ];
+        // Get available groups and roles using the service
+        $groups = $this->userService->getAvailableGroups($currentUser);
+        $allowedRoles = $this->userService->getAllowedRoles($currentUser);
+        $roleRequirements = $this->userService->getRoleRequirements();
 
         return Inertia::render('Admin/Users/Show', [
-            'user' => $companyUser,
+            'user' => $user,
             'userStats' => $userStats,
-            'allowedRoles' => $this->allowedRoles,
+            'allowedRoles' => $allowedRoles,
+            'groups' => $groups,
+            'roleRequirements' => $roleRequirements,
         ]);
     }
 
     /**
      * Update the specified user
      */
-    public function update(Request $request, User $companyUser): RedirectResponse
+    public function update(UpdateUserRequest $request, User $companyUser): RedirectResponse
     {
         $currentUser = auth()->user();
-        
-        // Ensure the user belongs to the same company and has allowed role
-        if ($companyUser->company_id !== $currentUser->company_id || 
-            !in_array($companyUser->user_type, $this->allowedRoles)) {
-            abort(403, 'User not found or access denied.');
+        $validated = $request->validated();
+
+        // Update user using service
+        $result = $this->userService->updateUser($currentUser, $companyUser->id, $validated);
+
+        if (!$result['success']) {
+            return back()->withErrors(['email' => $result['message']])->withInput();
         }
 
-        // Validate the request
-        $validated = $request->validate([
-            'first_name' => 'required|string|max:100',
-            'last_name' => 'required|string|max:100',
-            'email' => [
-                'required',
-                'string',
-                'email',
-                'max:191',
-                Rule::unique('users')->where(function ($query) use ($currentUser) {
-                    return $query->where('company_id', $currentUser->company_id);
-                })->ignore($companyUser->id)
-            ],
-            'user_type' => ['required', 'string', Rule::in($this->allowedRoles)],
-            'status' => ['sometimes', 'string', Rule::in(UserStatus::values())],
-        ]);
-
-        try {
-            $emailChanged = $companyUser->email !== $validated['email'];
-            
-            // Get the role ID for the user type
-            $roleId = $this->userTypeToRoleMapping[$validated['user_type']];
-
-            // Update user details
-            $companyUser->update([
-                'first_name' => $validated['first_name'],
-                'last_name' => $validated['last_name'],
-                'email' => $validated['email'],
-                'user_type' => $validated['user_type'],
-                'role_id' => $roleId,
-                'status' => $validated['status'] ?? $companyUser->status,
-            ]);
-
-            // If email changed and user is active, send notification about the change
-            if ($emailChanged && $companyUser->isActive()) {
-                // Generate OTP for email verification of the new address
-                $otpResult = $this->otpService->generateOtp($companyUser, 'email_change_verification');
-                
-                if ($otpResult['success']) {
-                    Log::info('Email change verification OTP sent', [
-                        'user_id' => $companyUser->id,
-                        'old_email' => $companyUser->getOriginal('email'),
-                        'new_email' => $validated['email'],
-                        'updated_by' => $currentUser->id
-                    ]);
-                }
-            }
-
-            Log::info('User updated by system admin', [
-                'updated_user_id' => $companyUser->id,
-                'updated_by' => $currentUser->id,
-                'changes' => $companyUser->getChanges(),
-                'email_changed' => $emailChanged
-            ]);
-
-            $message = "User {$companyUser->full_name} has been updated successfully.";
-            if ($emailChanged) {
-                $message .= " A verification email has been sent to the new email address.";
-            }
-
-            return redirect()->route('admin.users.show', $companyUser)
-                ->with('success', $message);
-
-        } catch (\Exception $e) {
-            Log::error('Failed to update user', [
-                'error' => $e->getMessage(),
-                'user_id' => $companyUser->id,
-                'updated_by' => $currentUser->id,
-                'data' => $validated
-            ]);
-
-            return back()->withErrors([
-                'email' => 'Failed to update user. Please try again.'
-            ])->withInput();
-        }
+        return redirect()->route('admin.users.show', $companyUser)
+            ->with('success', $result['message']);
     }
 
     /**
      * Deactivate the specified user (soft deletion via status change)
      */
-    public function destroy(User $companyUser): RedirectResponse
+    public function destroy(Request $request, User $companyUser): RedirectResponse
     {
         $currentUser = auth()->user();
+
+        // Validate OTP
+        $validated = $request->validate(['otp' => 'required|string|digits:6']);
+        $otpResult = $this->otpService->verifyOtp($currentUser, $validated['otp']);
+
+        if (!$otpResult['success']) {
+            return back()->withErrors(['otp' => $otpResult['message']]);
+        }
         
         // Ensure the user belongs to the same company and has allowed role
         if ($companyUser->company_id !== $currentUser->company_id || 
@@ -371,7 +329,7 @@ class CompanyUserController extends Controller
             $userId = $companyUser->id;
 
             // Check if user has active bookings
-            $activeBookings = $companyUser->bookings()
+            $activeBookings = $companyUser->allBookings()
                 ->where(function($query) {
                     $query->where('date', '>', now()->toDateString())
                           ->orWhere(function($q) {
@@ -421,9 +379,17 @@ class CompanyUserController extends Controller
     /**
      * Reactivate a deactivated user
      */
-    public function reactivate(User $companyUser): RedirectResponse
+    public function reactivate(Request $request, User $companyUser): RedirectResponse
     {
         $currentUser = auth()->user();
+
+        // Validate OTP
+        $validated = $request->validate(['otp' => 'required|string|digits:6']);
+        $otpResult = $this->otpService->verifyOtp($currentUser, $validated['otp']);
+
+        if (!$otpResult['success']) {
+            return back()->withErrors(['otp' => $otpResult['message']]);
+        }
         
         // Ensure the user belongs to the same company and has allowed role
         if ($companyUser->company_id !== $currentUser->company_id || 
@@ -474,48 +440,32 @@ class CompanyUserController extends Controller
     {
         $currentUser = auth()->user();
         
-        // Ensure the user belongs to the same company and has allowed role
-        if ($companyUser->company_id !== $currentUser->company_id || 
-            !in_array($companyUser->user_type, $this->allowedRoles)) {
-            abort(403, 'User not found or access denied.');
+        $result = $this->userService->resendOtp($currentUser, $companyUser->id);
+
+        if (!$result['success']) {
+            return back()->withErrors(['otp' => $result['message']]);
         }
 
-        // Determine OTP purpose based on user status
-        $purpose = $companyUser->isPending() ? 'account_setup' : 'login';
+        return back()->with('success', $result['message']);
+    }
 
-        try {
-            $otpResult = $this->otpService->generateOtp($companyUser, $purpose);
+    /**
+     * Send an OTP to the admin for a specific action
+     */
+    public function sendActionOtp(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'action' => ['required', 'string', Rule::in(['user_status_change'])],
+        ]);
 
-            if (!$otpResult['success']) {
-                Log::warning('Failed to resend OTP', [
-                    'user_id' => $companyUser->id,
-                    'requested_by' => $currentUser->id,
-                    'error' => $otpResult['message']
-                ]);
+        $admin = auth()->user();
 
-                return back()->withErrors([
-                    'otp' => $otpResult['message']
-                ]);
-            }
+        $otpResult = $this->otpService->generateOtp($admin, $validated['action']);
 
-            Log::info('OTP resent by system admin', [
-                'user_id' => $companyUser->id,
-                'requested_by' => $currentUser->id,
-                'purpose' => $purpose
-            ]);
-
-            return back()->with('success', "Setup instructions have been resent to {$companyUser->full_name}'s email address.");
-
-        } catch (\Exception $e) {
-            Log::error('Failed to resend OTP', [
-                'error' => $e->getMessage(),
-                'user_id' => $companyUser->id,
-                'requested_by' => $currentUser->id
-            ]);
-
-            return back()->withErrors([
-                'otp' => 'Failed to resend setup instructions. Please try again.'
-            ]);
+        if (!$otpResult['success']) {
+            return back()->withErrors(['otp' => $otpResult['message']]);
         }
+
+        return back()->with('success', 'An OTP has been sent to your email.');
     }
 }

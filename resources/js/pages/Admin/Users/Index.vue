@@ -52,10 +52,10 @@
             <Card>
                 <CardHeader>
                     <div class="flex items-center justify-between">
-                        <CardTitle class="text-lg font-semibold">Users ({{ filteredUsers.length }})</CardTitle>
+                        <CardTitle class="text-lg font-semibold">Users ({{ users.total }})</CardTitle>
                         <div class="flex items-center gap-2 text-sm text-muted-foreground">
                             <Users class="h-4 w-4" />
-                            {{ stats.total_users }} total users
+                            {{ roleStats.total }} total users
                         </div>
                     </div>
                 </CardHeader>
@@ -75,7 +75,7 @@
                             </thead>
                             <tbody>
                                 <tr 
-                                    v-for="user in paginatedUsers" 
+                                    v-for="user in users.data" 
                                     :key="user.id"
                                     class="border-b border-border/30 hover:bg-muted/30 transition-colors"
                                 >
@@ -111,16 +111,7 @@
                                     
                                     <!-- Status -->
                                     <td class="p-4">
-                                        <TooltipProvider>
-                                            <Tooltip>
-                                                <TooltipTrigger>
-                                                    <StatusBadge :status="user.status" />
-                                                </TooltipTrigger>
-                                                <TooltipContent>
-                                                    <p>{{ getStatusDescription(user.status) }}</p>
-                                                </TooltipContent>
-                                            </Tooltip>
-                                        </TooltipProvider>
+                                        <StatusBadge :status="user.status" />
                                     </td>
                                     
                                     <!-- Last Active -->
@@ -129,68 +120,33 @@
                                     </td>
                                     
                                     <!-- Actions -->
-                                    <td class="p-4">
-                                        <div class="flex items-center justify-end gap-1">
-                                            <!-- Status Action Button -->
-                                            <TooltipProvider>
-                                                <Tooltip>
-                                                    <TooltipTrigger>
-                                                        <Button
-                                                            @click="toggleUserStatus(user)"
-                                                            variant="ghost"
-                                                            size="sm"
-                                                            :class="getStatusActionClass(user.status)"
-                                                            class="h-8 w-8 p-0 rounded-lg"
-                                                        >
-                                                            <UserCheck v-if="user.status === 'inactive'" class="h-4 w-4" />
-                                                            <UserX v-else-if="user.status === 'active'" class="h-4 w-4" />
-                                                            <Clock v-else class="h-4 w-4" />
-                                                        </Button>
-                                                    </TooltipTrigger>
-                                                    <TooltipContent>
-                                                        <p>{{ getStatusActionTooltip(user.status) }}</p>
-                                                    </TooltipContent>
-                                                </Tooltip>
-                                            </TooltipProvider>
-
-                                            <!-- Edit Button -->
-                                            <TooltipProvider>
-                                                <Tooltip>
-                                                    <TooltipTrigger>
-                                                        <Button
-                                                            @click="editUser(user.id)"
-                                                            variant="ghost"
-                                                            size="sm"
-                                                            class="h-8 w-8 p-0 rounded-lg hover:bg-primary/10"
-                                                        >
-                                                            <Edit class="h-4 w-4" />
-                                                        </Button>
-                                                    </TooltipTrigger>
-                                                    <TooltipContent>
-                                                        <p>Edit user</p>
-                                                    </TooltipContent>
-                                                </Tooltip>
-                                            </TooltipProvider>
-
-                                            <!-- Delete Button -->
-                                            <TooltipProvider>
-                                                <Tooltip>
-                                                    <TooltipTrigger>
-                                                        <Button
-                                                            @click="deleteUser(user.id)"
-                                                            variant="ghost"
-                                                            size="sm"
-                                                            class="h-8 w-8 p-0 rounded-lg hover:bg-destructive/10 hover:text-destructive"
-                                                        >
-                                                            <Trash2 class="h-4 w-4" />
-                                                        </Button>
-                                                    </TooltipTrigger>
-                                                    <TooltipContent>
-                                                        <p>Delete user</p>
-                                                    </TooltipContent>
-                                                </Tooltip>
-                                            </TooltipProvider>
-                                        </div>
+                                    <td class="p-4 text-right">
+                                        <DropdownMenu>
+                                            <DropdownMenuTrigger as-child>
+                                                <Button variant="ghost" class="h-8 w-8 p-0">
+                                                    <span class="sr-only">Open menu</span>
+                                                    <MoreVertical class="h-4 w-4" />
+                                                </Button>
+                                            </DropdownMenuTrigger>
+                                            <DropdownMenuContent align="end">
+                                                <DropdownMenuItem @click="editUser(user.id)">
+                                                    <Edit class="mr-2 h-4 w-4" />
+                                                    <span>Edit</span>
+                                                </DropdownMenuItem>
+                                                <DropdownMenuItem v-if="user.status === 'inactive' || user.status === 'pending'" @click="initiateStatusChange(user, 'active')">
+                                                    <UserCheck class="mr-2 h-4 w-4" />
+                                                    <span>Activate</span>
+                                                </DropdownMenuItem>
+                                                <DropdownMenuItem v-if="user.status === 'active'" @click="initiateStatusChange(user, 'inactive')">
+                                                    <UserX class="mr-2 h-4 w-4" />
+                                                    <span>Deactivate</span>
+                                                </DropdownMenuItem>
+                                                <DropdownMenuItem @click="deleteUser(user.id)" class="text-red-600">
+                                                    <Trash2 class="mr-2 h-4 w-4" />
+                                                    <span>Delete</span>
+                                                </DropdownMenuItem>
+                                            </DropdownMenuContent>
+                                        </DropdownMenu>
                                     </td>
                                 </tr>
                             </tbody>
@@ -213,80 +169,100 @@
                     </div>
 
                     <!-- Pagination -->
-                    <div v-if="filteredUsers.length > 0" class="flex items-center justify-between p-4 border-t border-border/50">
+                    <div v-if="users.links.length > 3" class="flex items-center justify-between p-4 border-t border-border/50">
                         <p class="text-sm text-muted-foreground">
-                            Showing {{ startIndex + 1 }}-{{ Math.min(endIndex, filteredUsers.length) }} of {{ filteredUsers.length }} users
+                            Showing {{ users.from }} to {{ users.to }} of {{ users.total }} users
                         </p>
                         <div class="flex items-center gap-2">
                             <Button
-                                @click="previousPage"
-                                :disabled="currentPage === 1"
+                                v-for="(link, key) in users.links"
+                                :key="key"
+                                :href="link.url"
+                                v-html="link.label"
+                                :disabled="!link.url"
+                                :class="{ 'bg-primary text-primary-foreground': link.active }"
                                 variant="outline"
                                 size="sm"
                                 class="h-8 px-3 rounded-lg"
-                            >
-                                <ChevronLeft class="h-4 w-4" />
-                                Previous
-                            </Button>
-                            <div class="flex items-center gap-1">
-                                <template v-for="page in visiblePages" :key="page">
-                                    <Button
-                                        v-if="page !== '...'"
-                                        @click="goToPage(page as number)"
-                                        :variant="currentPage === page ? 'default' : 'ghost'"
-                                        size="sm"
-                                        class="h-8 w-8 p-0 rounded-lg"
-                                    >
-                                        {{ page }}
-                                    </Button>
-                                    <span v-else class="px-2 text-muted-foreground">...</span>
-                                </template>
-                            </div>
-                            <Button
-                                @click="nextPage"
-                                :disabled="currentPage === totalPages"
-                                variant="outline"
-                                size="sm"
-                                class="h-8 px-3 rounded-lg"
-                            >
-                                Next
-                                <ChevronRight class="h-4 w-4" />
-                            </Button>
+                            />
                         </div>
                     </div>
                 </CardContent>
             </Card>
         </div>
 
-        <!-- Toast Notifications -->
-        <Toast />
+        <!-- OTP Modal -->
+        <Dialog :open="isOtpModalVisible" @update:open="isOtpModalVisible = $event">
+            <DialogContent class="sm:max-w-[425px]">
+                <DialogHeader>
+                    <DialogTitle>Confirm Action</DialogTitle>
+                    <DialogDescription>
+                        An OTP has been sent to your email. Please enter it below to confirm the status change for {{ targetUserForStatusChange?.first_name }} {{ targetUserForStatusChange?.last_name }}.
+                    </DialogDescription>
+                </DialogHeader>
+                <div class="grid gap-4 py-4">
+                    <Input
+                        v-model="otpCode"
+                        placeholder="Enter 6-digit OTP"
+                        class="col-span-3"
+                        @keyup.enter="confirmStatusChange"
+                    />
+                    <p v-if="otpError" class="text-red-500 text-sm">{{ otpError }}</p>
+                </div>
+                <DialogFooter>
+                    <Button variant="outline" @click="isOtpModalVisible = false">Cancel</Button>
+                    <Button @click="confirmStatusChange">Confirm</Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
     </AppLayout>
 </template>
 
 <script setup lang="ts">
-import { withDefaults, computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { router } from '@inertiajs/vue3'
 import AppLayout from '@/layouts/AppLayout.vue'
 import Heading from '@/components/Heading.vue'
 import StatusBadge from '@/components/StatusBadge.vue'
-import Toast from '@/components/Toast.vue'
 import { Button } from '@/components/ui/button'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
-import { toast } from '@/composables/useToast'
 import {
     UserPlus,
     Search,
     Users,
     Edit,
     Trash2,
-    ChevronLeft,
-    ChevronRight,
     UserCheck,
     UserX,
-    Clock
+    Clock,
+    MoreVertical
 } from 'lucide-vue-next'
+import { Link } from '@inertiajs/vue3'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { toast } from 'vue-sonner'
+
+// OTP Modal State
+const isOtpModalVisible = ref(false)
+const otpCode = ref('')
+const targetUserForStatusChange = ref<User | null>(null)
+const newStatusForChange = ref<string | null>(null)
+const otpError = ref<string | null>(null)
+
 
 interface User {
     id: number
@@ -299,105 +275,56 @@ interface User {
     created_at: string
 }
 
-interface Props {
-    users?: User[]
-    stats?: {
-        total_users: number
-        active_users: number
-        pending_users: number
-    }
+interface PaginatedUsers {
+    data: User[];
+    links: { url: string | null; label: string; active: boolean }[];
+    from: number;
+    to: number;
+    total: number;
 }
 
-const props = withDefaults(defineProps<Props>(), {
-    users: () => [],
-    stats: () => ({
-        total_users: 0,
-        active_users: 0,
-        pending_users: 0
-    })
-})
+interface Props {
+    users: PaginatedUsers;
+    filters: {
+        search: string;
+        role: string;
+        status: string;
+    };
+    allowedRoles: string[];
+    roleStats: {
+        total?: number;
+        hod?: number;
+        booking_agent?: number;
+        invitee?: number;
+    };
+}
+
+const props = defineProps<Props>();
 
 // Search and filter state
-const searchQuery = ref('')
-const statusFilter = ref('')
-const roleFilter = ref('')
+const searchQuery = ref(props.filters.search)
+const statusFilter = ref(props.filters.status)
+const roleFilter = ref(props.filters.role)
 
-// Pagination state
-const currentPage = ref(1)
-const itemsPerPage = 10
+watch([searchQuery, statusFilter, roleFilter], () => {
+    router.get(
+        route('admin.users.index'),
+        {
+            search: searchQuery.value,
+            status: statusFilter.value,
+            role: roleFilter.value,
+        },
+        {
+            preserveState: true,
+            replace: true,
+        }
+    )
+});
+
 
 // Computed properties
 const filteredUsers = computed(() => {
-    let filtered = Array.isArray(props.users) ? props.users : []
-
-    // Search filter
-    if (searchQuery.value) {
-        const query = searchQuery.value.toLowerCase()
-        filtered = filtered.filter(user => 
-            user.first_name.toLowerCase().includes(query) ||
-            user.last_name.toLowerCase().includes(query) ||
-            user.email.toLowerCase().includes(query) ||
-            user.user_type.toLowerCase().includes(query)
-        )
-    }
-
-    // Status filter
-    if (statusFilter.value) {
-        filtered = filtered.filter(user => user.status === statusFilter.value)
-    }
-
-    // Role filter
-    if (roleFilter.value) {
-        filtered = filtered.filter(user => user.user_type === roleFilter.value)
-    }
-
-    return filtered
-})
-
-const totalPages = computed(() => Math.ceil(filteredUsers.value.length / itemsPerPage))
-
-const startIndex = computed(() => (currentPage.value - 1) * itemsPerPage)
-const endIndex = computed(() => startIndex.value + itemsPerPage)
-
-const paginatedUsers = computed(() => {
-    const users = filteredUsers.value
-    if (!Array.isArray(users)) return []
-    return users.slice(startIndex.value, endIndex.value)
-})
-
-const visiblePages = computed(() => {
-    const pages: (number | string)[] = []
-    const total = totalPages.value
-    const current = currentPage.value
-
-    if (total <= 7) {
-        for (let i = 1; i <= total; i++) {
-            pages.push(i)
-        }
-    } else {
-        pages.push(1)
-        
-        if (current > 3) {
-            pages.push('...')
-        }
-        
-        const start = Math.max(2, current - 1)
-        const end = Math.min(total - 1, current + 1)
-        
-        for (let i = start; i <= end; i++) {
-            if (!pages.includes(i)) {
-                pages.push(i)
-            }
-        }
-        
-        if (current < total - 2) {
-            pages.push('...')
-        }
-        
-        pages.push(total)
-    }
-
-    return pages
+    return props.users.data;
 })
 
 // Functions
@@ -489,46 +416,52 @@ const editUser = (userId: number) => {
     router.visit(`/admin/users/${userId}/edit`)
 }
 
-const toggleUserStatus = (user: User) => {
-    const actions = {
-        'active': {
-            action: 'deactivate',
-            message: `Are you sure you want to deactivate ${user.first_name} ${user.last_name}? They will lose access to the system.`,
-            endpoint: `/admin/users/${user.id}/deactivate`
-        },
-        'inactive': {
-            action: 'activate',
-            message: `Are you sure you want to activate ${user.first_name} ${user.last_name}? They will gain access to the system.`,
-            endpoint: `/admin/users/${user.id}/activate`
-        },
-        'pending': {
-            action: 'resend_verification',
-            message: `Resend verification email to ${user.first_name} ${user.last_name}?`,
-            endpoint: `/admin/users/${user.id}/resend-verification`
-        }
-    }
+const initiateStatusChange = async (user: User, newStatus: string) => {
+    targetUserForStatusChange.value = user;
+    newStatusForChange.value = newStatus;
+    otpCode.value = '';
+    otpError.value = null;
 
-    const config = actions[user.status as keyof typeof actions]
-    if (!config) return
-
-    if (confirm(config.message)) {
-        router.post(config.endpoint, {}, {
+    try {
+        await router.post(route('admin.users.send-action-otp'), { action: 'user_status_change' }, {
             preserveScroll: true,
             onSuccess: () => {
-                const successMessages = {
-                    activate: `${user.first_name} ${user.last_name} has been activated and can now access the system.`,
-                    deactivate: `${user.first_name} ${user.last_name} has been deactivated and can no longer access the system.`,
-                    resend_verification: `Verification email has been sent to ${user.first_name} ${user.last_name}.`
-                }
-                toast.success(successMessages[config.action as keyof typeof successMessages])
+                isOtpModalVisible.value = true;
+                toast.info('An OTP has been sent to your email.');
             },
             onError: (errors) => {
-                console.error(`Failed to ${config.action} user:`, errors)
-                toast.error(`Failed to ${config.action} user. Please try again.`)
+                toast.error('Failed to send OTP', { description: Object.values(errors).join('\n') });
             }
-        })
+        });
+    } catch (e) {
+        toast.error('An unexpected error occurred while sending OTP.');
     }
-}
+};
+
+const confirmStatusChange = () => {
+    if (!targetUserForStatusChange.value || !newStatusForChange.value) return;
+
+    const user = targetUserForStatusChange.value;
+    const endpoint = newStatusForChange.value === 'active'
+        ? route('admin.users.reactivate', user.id)
+        : `/admin/users/${user.id}`; // Uses destroy method for deactivation
+
+    const method = newStatusForChange.value === 'active' ? 'post' : 'delete';
+
+    router.visit(endpoint, {
+        method: method,
+        data: { otp: otpCode.value },
+        preserveScroll: true,
+        onSuccess: () => {
+            isOtpModalVisible.value = false;
+            toast.success(`User ${user.first_name} has been ${newStatusForChange.value}.`);
+        },
+        onError: (errors) => {
+            otpError.value = errors.otp || 'An unknown error occurred.';
+        }
+    });
+};
+
 
 const deleteUser = (userId: number) => {
     if (confirm('Are you sure you want to delete this user? This action cannot be undone.')) {
@@ -545,43 +478,5 @@ const deleteUser = (userId: number) => {
     }
 }
 
-// Mock data if no users provided
-if (props.users.length === 0) {
-    const mockUsers: User[] = [
-        {
-            id: 1,
-            first_name: 'John',
-            last_name: 'Doe',
-            email: 'john.doe@company.com',
-            user_type: 'hod',
-            status: 'active',
-            last_active: new Date().toISOString(),
-            created_at: new Date().toISOString()
-        },
-        {
-            id: 2,
-            first_name: 'Jane',
-            last_name: 'Smith',
-            email: 'jane.smith@company.com',
-            user_type: 'booking_agent',
-            status: 'active',
-            last_active: new Date(Date.now() - 86400000).toISOString(),
-            created_at: new Date().toISOString()
-        },
-        {
-            id: 3,
-            first_name: 'Mike',
-            last_name: 'Johnson',
-            email: 'mike.johnson@company.com',
-            user_type: 'invitee',
-            status: 'pending',
-            last_active: new Date(Date.now() - 172800000).toISOString(),
-            created_at: new Date().toISOString()
-        }
-    ]
-    
-    // @ts-ignore - temporarily override for demo
-    props.users = mockUsers
-    props.stats.total_users = mockUsers.length
-}
+
 </script>

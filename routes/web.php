@@ -6,6 +6,7 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\Admin\AdminDashboardController;
 use App\Http\Controllers\Admin\CompanyUserController;
 use App\Http\Controllers\Admin\CompanyGroupController;
+use App\Http\Controllers\Group\GroupController;
 use App\Http\Controllers\Hod\HodDashboardController;
 use App\Http\Controllers\Agent\AgentDashboardController;
 use App\Http\Controllers\User\UserDashboardController;
@@ -83,15 +84,15 @@ Route::middleware([
     Route::get('/settings', [AdminDashboardController::class, 'settings'])->name('settings');
     
     // User Management Routes
-    Route::resource('users', CompanyUserController::class);
-    Route::post('users/{user}/resend-otp', [CompanyUserController::class, 'resendOtp'])->name('users.resend-otp');
-    Route::post('users/{user}/reactivate', [CompanyUserController::class, 'reactivate'])->name('users.reactivate');
+    Route::resource('users', CompanyUserController::class)->parameter('users', 'companyUser');
+    Route::post('users/send-action-otp', [CompanyUserController::class, 'sendActionOtp'])->name('users.send-action-otp');
+    Route::post('users/{companyUser}/resend-otp', [CompanyUserController::class, 'resendOtp'])->name('users.resend-otp');
+    Route::post('users/{companyUser}/reactivate', [CompanyUserController::class, 'reactivate'])->name('users.reactivate');
     
-    // Group Management Routes
+    // Group Management Routes (Web UI)
     Route::resource('groups', CompanyGroupController::class);
     Route::post('groups/{group}/members', [CompanyGroupController::class, 'addMembers'])->name('groups.add-members');
     Route::delete('groups/{group}/members', [CompanyGroupController::class, 'removeMembers'])->name('groups.remove-members');
-    Route::patch('groups/{group}/members/{user}', [CompanyGroupController::class, 'updateMemberRole'])->name('groups.update-member-role');
 });
 
 // Head of Department Routes
@@ -156,6 +157,23 @@ Route::middleware([
     Route::get('/bookings', [ExternalDashboardController::class, 'bookings'])->name('bookings');
     Route::get('/requests', [ExternalDashboardController::class, 'requests'])->name('requests');
     Route::get('/requests/create', [ExternalDashboardController::class, 'createRequest'])->name('requests.create');
+});
+
+// API Routes for Group Management (System Admin and HOD access)
+Route::middleware([
+    'tenant',
+    'auth',
+    'verified',
+    RoleAccessMiddleware::class . ':system_admin,hod'
+])->prefix('api/groups')->name('api.groups.')->group(function () {
+    Route::get('/', [GroupController::class, 'index'])->name('index');
+    Route::post('/', [GroupController::class, 'store'])->name('store');
+    Route::get('/with-member-counts', [GroupController::class, 'withMemberCounts'])->name('with-member-counts');
+    Route::get('/{id}', [GroupController::class, 'show'])->name('show');
+    Route::put('/{id}', [GroupController::class, 'update'])->name('update');
+    Route::delete('/{id}', [GroupController::class, 'destroy'])->name('destroy');
+    Route::post('/{id}/activate', [GroupController::class, 'activate'])->name('activate');
+    Route::post('/{id}/deactivate', [GroupController::class, 'deactivate'])->name('deactivate');
 });
 
 // Shared routes accessible to all authenticated users

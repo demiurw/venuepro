@@ -36,6 +36,7 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withProviders([
         // This is now in the correct place
         Spatie\Multitenancy\MultitenancyServiceProvider::class,
+        App\Providers\RepositoryServiceProvider::class,
     ])
     ->withExceptions(function (Exceptions $exceptions) {
         //

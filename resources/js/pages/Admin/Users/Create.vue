@@ -118,19 +118,66 @@
                             </select>
                             <InputError :message="form.errors.user_type" />
                             <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mt-3">
-                                <div class="p-3 rounded-lg border border-border/30 bg-muted/20">
-                                    <h4 class="text-sm font-medium text-foreground mb-1">Head of Department</h4>
-                                    <p class="text-xs text-muted-foreground">Full management access to rooms and bookings</p>
+                                <div class="p-3 rounded-lg border border-border/30 bg-muted/20 relative">
+                                    <div class="flex items-start justify-between">
+                                        <div>
+                                            <h4 class="text-sm font-medium text-foreground mb-1">Head of Department</h4>
+                                            <p class="text-xs text-muted-foreground">Full management access to rooms and bookings</p>
+                                        </div>
+                                        <span class="text-xs bg-warning/20 text-warning px-2 py-1 rounded-md font-medium">Group Required</span>
+                                    </div>
                                 </div>
-                                <div class="p-3 rounded-lg border border-border/30 bg-muted/20">
-                                    <h4 class="text-sm font-medium text-foreground mb-1">Booking Agent</h4>
-                                    <p class="text-xs text-muted-foreground">Can create and manage bookings for others</p>
+                                <div class="p-3 rounded-lg border border-border/30 bg-muted/20 relative">
+                                    <div class="flex items-start justify-between">
+                                        <div>
+                                            <h4 class="text-sm font-medium text-foreground mb-1">Booking Agent</h4>
+                                            <p class="text-xs text-muted-foreground">Can create and manage bookings for others</p>
+                                        </div>
+                                        <span class="text-xs bg-warning/20 text-warning px-2 py-1 rounded-md font-medium">Group Required</span>
+                                    </div>
                                 </div>
-                                <div class="p-3 rounded-lg border border-border/30 bg-muted/20">
-                                    <h4 class="text-sm font-medium text-foreground mb-1">Invitee</h4>
-                                    <p class="text-xs text-muted-foreground">Basic access to view and book available rooms</p>
+                                <div class="p-3 rounded-lg border border-border/30 bg-muted/20 relative">
+                                    <div class="flex items-start justify-between">
+                                        <div>
+                                            <h4 class="text-sm font-medium text-foreground mb-1">Invitee</h4>
+                                            <p class="text-xs text-muted-foreground">Basic access to view and book available rooms</p>
+                                        </div>
+                                        <span class="text-xs bg-muted text-muted-foreground px-2 py-1 rounded-md">Group Optional</span>
+                                    </div>
                                 </div>
                             </div>
+                        </div>
+
+                        <!-- Group Selection (conditional) -->
+                        <div v-if="showGroupSelection" class="space-y-2">
+                            <Label for="group_id" class="text-body-sm font-medium text-foreground">
+                                Group Assignment {{ isGroupRequired ? '*' : '' }}
+                            </Label>
+                            <select 
+                                id="group_id"
+                                v-model="form.group_id"
+                                :required="isGroupRequired"
+                                :disabled="form.processing"
+                                :class="[
+                                    'w-full h-11 px-3 rounded-xl border bg-background text-foreground focus:border-primary/60 focus:ring-primary/20 focus:outline-none',
+                                    isGroupRequired ? 'border-border/60' : 'border-border/40'
+                                ]"
+                            >
+                                <option value="">{{ isGroupRequired ? 'Select a group' : 'No group assignment' }}</option>
+                                <option v-for="group in groups" :key="group.id" :value="group.id">
+                                    {{ group.name }}
+                                    <span v-if="group.description"> - {{ group.description }}</span>
+                                </option>
+                            </select>
+                            <InputError :message="form.errors.group_id" />
+                            <div v-if="isGroupRequired" class="p-3 bg-warning/10 border border-warning/20 rounded-lg">
+                                <p class="text-sm text-warning font-medium">
+                                    ⚠️ Group assignment is required for {{ form.user_type.replace('_', ' ') }} role
+                                </p>
+                            </div>
+                            <p class="text-caption text-muted-foreground">
+                                {{ getGroupSelectionHelpText() }}
+                            </p>
                         </div>
 
                         <!-- OTP Info -->
@@ -186,8 +233,9 @@
                             <div class="space-y-2 text-sm text-muted-foreground">
                                 <p>• Users will receive an OTP verification email immediately after creation</p>
                                 <p>• They must verify their email before accessing VenuePro</p>
+                                <p>• Head of Department and Booking Agent roles require group assignment</p>
+                                <p>• Group assignment for Invitees is optional but recommended for organization</p>
                                 <p>• Role permissions can be changed later in the user management section</p>
-                                <p>• All users will belong to your organization's workspace</p>
                             </div>
                         </div>
                     </div>
@@ -216,14 +264,29 @@ import {
     HelpCircle
 } from 'lucide-vue-next'
 
+interface Group {
+    id: number
+    name: string
+    member_count: number
+    status: string
+}
+
+interface RoleRequirement {
+    group_required: boolean
+}
+
 interface Props {
     message?: string
     allowedRoles?: string[]
+    groups?: Group[]
+    roleRequirements?: Record<string, RoleRequirement>
 }
 
 const props = withDefaults(defineProps<Props>(), {
     message: '',
-    allowedRoles: () => []
+    allowedRoles: () => [],
+    groups: () => [],
+    roleRequirements: () => ({})
 })
 
 // Form data
@@ -231,19 +294,51 @@ const form = useForm({
     first_name: '',
     last_name: '',
     email: '',
-    user_type: ''
+    user_type: '',
+    group_id: ''
 })
 
 // Computed properties
+const isGroupRequired = computed(() => {
+    return props.roleRequirements?.[form.user_type]?.group_required ?? false
+})
+
 const isFormValid = computed(() => {
-    return form.first_name && 
+    const basicValidation = form.first_name && 
            form.last_name && 
            form.email && 
            form.user_type &&
            form.email.includes('@')
+    
+    // If group is required for this role, ensure group is selected
+    if (isGroupRequired.value) {
+        return basicValidation && form.group_id
+    }
+    
+    return basicValidation
+})
+
+const showGroupSelection = computed(() => {
+    // Show group selection if there are groups available and the role can have group membership
+    return form.user_type && props.groups && props.groups.length > 0
 })
 
 // Functions
+const getGroupSelectionHelpText = () => {
+    if (isGroupRequired.value) {
+        const requiredTexts = {
+            'hod': 'Head of Department users must be assigned to a group to manage their team and resources',
+            'booking_agent': 'Booking Agents must be assigned to a group to handle bookings for specific departments'
+        }
+        return requiredTexts[form.user_type as keyof typeof requiredTexts] || 'This role requires group assignment'
+    } else {
+        const optionalTexts = {
+            'invitee': 'Group assignment is optional for invitees - they can book any available rooms'
+        }
+        return optionalTexts[form.user_type as keyof typeof optionalTexts] || 'Group assignment is optional for this role'
+    }
+}
+
 const submit = () => {
     form.post('/admin/users', {
         onSuccess: () => {
