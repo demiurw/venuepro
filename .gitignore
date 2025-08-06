@@ -7,6 +7,10 @@
 /storage/*.key
 /storage/pail
 /vendor
+/.claude
+wayforward.pdf
+*.md
+*.ps1
 .env
 .env.backup
 .env.production
