@@ -12,15 +12,13 @@ class Role extends SpatieRole
     protected $fillable = [
         'name',
         'description',
-        'permissions',
-        'is_system_role',
+        'allowed_auth_methods',
         'guard_name',
         'team_id',
     ];
 
     protected $casts = [
-        'permissions' => 'array',
-        'is_system_role' => 'boolean',
+        'allowed_auth_methods' => 'array',
     ];
 
     /**

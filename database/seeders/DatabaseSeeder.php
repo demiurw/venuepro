@@ -70,6 +70,11 @@ class DatabaseSeeder extends Seeder
             ->has(Room::factory()->count(3))
             ->create(['company_id' => $secondCompany->id]);
 
+        // Seed roles and permissions (this should run before users are created to avoid role conflicts)
+        $this->call(RolePermissionSeeder::class);
+
+        $this->call(ManualTestingSeeder::class);
+
         // Seeder complete - tenant context will be cleaned up automatically when process ends
     }
 }

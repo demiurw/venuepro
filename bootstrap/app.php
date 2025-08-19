@@ -4,6 +4,7 @@ use App\Http\Middleware\DashboardRedirectMiddleware;
 use App\Http\Middleware\EnsureUserStatusMiddleware;
 use App\Http\Middleware\HandleAppearance;
 use App\Http\Middleware\HandleInertiaRequests;
+use App\Http\Middleware\OnboardingMiddleware;
 use App\Http\Middleware\RoleAccessMiddleware;
 use App\Http\Middleware\SetTenantFromUser;
 use Illuminate\Foundation\Application;
@@ -31,12 +32,16 @@ return Application::configure(basePath: dirname(__DIR__))
             'dashboard.redirect' => DashboardRedirectMiddleware::class,
             'role.access' => RoleAccessMiddleware::class,
             'user.status' => EnsureUserStatusMiddleware::class,
+            'onboarding' => OnboardingMiddleware::class,
+            'permission' => \App\Http\Middleware\PermissionMiddleware::class,
+            'role' => \App\Http\Middleware\RoleMiddleware::class,
         ]);
     })
     ->withProviders([
         // This is now in the correct place
         Spatie\Multitenancy\MultitenancyServiceProvider::class,
         App\Providers\RepositoryServiceProvider::class,
+        App\Providers\AuthServiceProvider::class,
     ])
     ->withExceptions(function (Exceptions $exceptions) {
         //

@@ -12,8 +12,10 @@ use App\Http\Controllers\Agent\AgentDashboardController;
 use App\Http\Controllers\User\UserDashboardController;
 use App\Http\Controllers\External\ExternalDashboardController;
 use App\Http\Controllers\VenueProAdmin\VenueProAdminDashboardController;
+use App\Http\Controllers\OnboardingController;
 use App\Http\Middleware\DashboardRedirectMiddleware;
 use App\Http\Middleware\RoleAccessMiddleware;
+use App\Http\Middleware\OnboardingMiddleware;
 use Inertia\Inertia;
 
 /*
@@ -67,12 +69,44 @@ Route::middleware([
     Route::get('/analytics', [VenueProAdminDashboardController::class, 'analytics'])->name('analytics');
 });
 
-// System Admin Routes
+// Onboarding Routes (System Admin only, NOT protected by onboarding middleware)
 Route::middleware([
     'tenant',
     'auth',
     'verified',
     RoleAccessMiddleware::class . ':system_admin'
+])->prefix('onboarding')->name('onboarding.')->group(function () {
+    // Onboarding steps
+    Route::get('/buildings', [OnboardingController::class, 'buildings'])->name('buildings');
+    Route::post('/buildings', [OnboardingController::class, 'storeBuildings'])->name('buildings.store');
+    
+    Route::get('/rooms', [OnboardingController::class, 'rooms'])->name('rooms');
+    Route::post('/rooms', [OnboardingController::class, 'storeRooms'])->name('rooms.store');
+    
+    Route::get('/groups', [OnboardingController::class, 'groups'])->name('groups');
+    Route::post('/groups', [OnboardingController::class, 'storeGroups'])->name('groups.store');
+    
+    Route::get('/users', [OnboardingController::class, 'users'])->name('users');
+    Route::post('/users', [OnboardingController::class, 'storeUsers'])->name('users.store');
+    
+    Route::get('/labels', [OnboardingController::class, 'labels'])->name('labels');
+    Route::post('/labels', [OnboardingController::class, 'storeLabels'])->name('labels.store');
+    
+    // Navigation helpers
+    Route::post('/skip/{step}', [OnboardingController::class, 'skipStep'])->name('skip');
+    Route::post('/previous/{step}', [OnboardingController::class, 'previousStep'])->name('previous');
+    
+    // AJAX endpoint for progress
+    Route::get('/progress', [OnboardingController::class, 'getProgress'])->name('progress');
+});
+
+// System Admin Routes (with onboarding middleware)
+Route::middleware([
+    'tenant',
+    'auth',
+    'verified',
+    RoleAccessMiddleware::class . ':system_admin',
+    'onboarding'
 ])->prefix('admin')->name('admin.')->group(function () {
     Route::get('/dashboard', [AdminDashboardController::class, 'index'])->name('dashboard');
 

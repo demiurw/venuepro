@@ -137,3 +137,56 @@ export type AppPageProps<T extends Record<string, unknown> = Record<string, unkn
 };
 
 export type BreadcrumbItemType = BreadcrumbItem;
+
+// Onboarding interfaces
+export interface OnboardingProgress {
+    current_step: number;
+    completed_steps: string[];
+    total_steps: number;
+    is_complete: boolean;
+}
+
+export interface OnboardingBuilding {
+    name: string;
+    address: string;
+    description?: string;
+}
+
+export interface OnboardingRoom {
+    name: string;
+    building_id?: number;
+    building_name?: string;
+    capacity: number;
+    type: 'conference' | 'meeting' | 'training' | 'auditorium' | 'classroom' | 'other';
+    description?: string;
+    equipment?: string;
+}
+
+export interface OnboardingGroup {
+    name: string;
+    description?: string;
+}
+
+export interface OnboardingUser {
+    first_name: string;
+    last_name: string;
+    email: string;
+    user_type: 'hod' | 'booking_agent' | 'invitee';
+    group_name?: string;
+}
+
+export interface OnboardingLabel {
+    name: string;
+    color: string;
+    description?: string;
+}
+
+export interface OnboardingStep {
+    id: string;
+    title: string;
+    description: string;
+    component: string;
+    is_completed: boolean;
+    is_current: boolean;
+    is_accessible: boolean;
+}

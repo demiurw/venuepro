@@ -11,7 +11,7 @@ class CreateBookingAttendeeTable extends Migration
         Schema::create('booking_attendee', function (Blueprint $table) {
             $table->id();
             $table->foreignId('company_id')->constrained('companies')->onDelete('cascade');
-            $table->foreignId('booking_id')->constrained('booking')->onDelete('cascade');
+            $table->foreignId('booking_id')->constrained('bookings')->onDelete('cascade');
             $table->foreignId('user_id')->nullable()->constrained('users');
             $table->string('email');
             $table->string('name')->nullable();

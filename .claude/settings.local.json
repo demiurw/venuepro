@@ -7,7 +7,10 @@
       "Bash(ls:*)",
       "Bash(mkdir:*)",
       "Bash(npm run build:*)",
-      "Bash(cp:*)"
+      "Bash(cp:*)",
+      "Bash(find:*)",
+      "Bash(php:*)",
+      "Bash(rm:*)"
     ],
     "deny": []
   }

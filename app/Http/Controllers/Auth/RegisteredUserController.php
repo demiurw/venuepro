@@ -73,8 +73,14 @@ class RegisteredUserController extends Controller
             // Create company first
             $company = $this->createCompany($request->company_name);
 
-            // Get default admin role for first user
-            $defaultRole = $this->getDefaultAdminRole();
+            // Set the company as current tenant for Spatie permissions
+            $company->makeCurrent();
+            
+            // Set the team context for Spatie permissions
+            app(\Spatie\Permission\PermissionRegistrar::class)->setPermissionsTeamId($company->id);
+
+            // Get default admin role for first user (scoped to this company)
+            $defaultRole = $this->getDefaultAdminRole($company);
             if (!$defaultRole) {
                 DB::rollBack();
                 return back()->withErrors([
@@ -84,6 +90,9 @@ class RegisteredUserController extends Controller
 
             // Create user with OTP-only authentication (now active since OTP is already verified)
             $user = $this->createActiveUser($request, $company, $defaultRole);
+            
+            // Assign the role to the user using Spatie permissions (with proper team context)
+            $user->assignRole($defaultRole);
 
             // Update the OTP attempt with user_id and company_id for future reference
             $this->updateOtpAttemptWithUserInfo($otpResult['otp_attempt_id'], $user->id, $company->id);
@@ -151,16 +160,50 @@ class RegisteredUserController extends Controller
 
     /**
      * Get the default admin role for new company registration.
+     * This assigns the System Admin role to the first user registering for a new company.
      *
+     * @param Company $company
      * @return Role|null
      */
-    protected function getDefaultAdminRole(): ?Role
+    protected function getDefaultAdminRole(Company $company): ?Role
     {
-        // For multi-tenant setup, you might need to create role per company
-        // For now, get the global admin role
-        return Role::where('name', 'admin')
-            ->orWhere('name', 'system_admin')
+        // Check if System Admin role exists for this company/team
+        $role = Role::where('name', 'System Admin')
+            ->where('guard_name', 'web')
+            ->where('team_id', $company->id)
             ->first();
+            
+        // If no company-specific role exists, create one
+        if (!$role) {
+            $role = Role::create([
+                'name' => 'System Admin',
+                'guard_name' => 'web',
+                'team_id' => $company->id,
+                'description' => 'Company system administrators with full control over company resources and users.',
+                'allowed_auth_methods' => json_encode(['otp', 'oauth'])
+            ]);
+            
+            // Assign all System Admin permissions
+            $permissions = [
+                'manage_company_settings',
+                'manage_buildings', 
+                'manage_rooms',
+                'manage_company_users',
+                'internal_billing_management',
+                'book_on_behalf_of_company_users',
+                'transfer_all_company_bookings',
+            ];
+            
+            foreach ($permissions as $permissionName) {
+                $permission = \Spatie\Permission\Models\Permission::firstOrCreate([
+                    'name' => $permissionName,
+                    'guard_name' => 'web'
+                ]);
+                $role->givePermissionTo($permission);
+            }
+        }
+        
+        return $role;
     }
 
     /**

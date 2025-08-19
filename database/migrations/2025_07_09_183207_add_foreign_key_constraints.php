@@ -20,8 +20,8 @@ class AddForeignKeyConstraints extends Migration
         });
 
         // Add foreign key for bookings.parent_booking_id
-        Schema::table('booking', function (Blueprint $table) {
-            $table->foreign('parent_booking_id')->references('id')->on('booking')->onDelete('set null');
+        Schema::table('bookings', function (Blueprint $table) {
+            $table->foreign('parent_booking_id')->references('id')->on('bookings')->onDelete('set null');
         });
 
         // Add foreign key for invoice.external_booking_request_id
@@ -41,7 +41,7 @@ class AddForeignKeyConstraints extends Migration
             $table->dropForeign(['deactivated_by']);
         });
 
-        Schema::table('booking', function (Blueprint $table) {
+        Schema::table('bookings', function (Blueprint $table) {
             $table->dropForeign(['parent_booking_id']);
         });
 
