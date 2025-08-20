@@ -14,12 +14,31 @@ class Building extends Model
 
     protected $fillable = [
         'name',
-        'address',
+        'description',
+        'address_line1',
+        'address_line2',
+        'city',
+        'state_id',
+        'country_id',
+        'postal_code',
+        'timezone',
+        'buffer_time_minutes',
+        'is_active',
         'company_id',
     ];
 
     public function rooms()
     {
         return $this->hasMany(Room::class);
+    }
+
+    public function state()
+    {
+        return $this->belongsTo(State::class);
+    }
+
+    public function country()
+    {
+        return $this->belongsTo(Country::class);
     }
 }

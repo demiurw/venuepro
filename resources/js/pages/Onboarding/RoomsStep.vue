@@ -54,11 +54,11 @@
                             <div class="flex items-start justify-between mb-4">
                                 <div class="flex items-center gap-3">
                                     <div class="flex items-center justify-center w-8 h-8 bg-primary/10 rounded-lg">
-                                        <component :is="getRoomTypeIcon(room.type)" class="h-4 w-4 text-primary" />
+                                        <DoorOpen class="h-4 w-4 text-primary" />
                                     </div>
                                     <div>
                                         <h4 class="font-medium text-foreground">Room {{ index + 1 }}</h4>
-                                        <p class="text-sm text-muted-foreground">{{ getRoomTypeLabel(room.type) }}</p>
+                                        <p class="text-sm text-muted-foreground">Room details</p>
                                     </div>
                                 </div>
                                 <Button
@@ -97,37 +97,17 @@
                                     </Label>
                                     <select
                                         :id="`room-building-${index}`"
-                                        v-model="room.building_name"
+                                        v-model="room.building_id"
                                         :disabled="loading || !availableBuildings.length"
                                         class="w-full h-11 px-3 rounded-xl border border-border/60 bg-background text-foreground focus:border-primary/60 focus:ring-primary/20 focus:outline-none"
                                     >
                                         <option value="">Select Building</option>
-                                        <option v-for="building in availableBuildings" :key="building" :value="building">
-                                            {{ building }}
+                                        <option v-for="building in availableBuildings" :key="building.id" :value="building.id">
+                                            {{ building.name }}
                                         </option>
                                     </select>
                                 </div>
 
-                                <!-- Room Type -->
-                                <div class="space-y-2">
-                                    <Label :for="`room-type-${index}`" class="text-sm font-medium">
-                                        Room Type *
-                                    </Label>
-                                    <select
-                                        :id="`room-type-${index}`"
-                                        v-model="room.type"
-                                        :disabled="loading"
-                                        required
-                                        class="w-full h-11 px-3 rounded-xl border border-border/60 bg-background text-foreground focus:border-primary/60 focus:ring-primary/20 focus:outline-none"
-                                    >
-                                        <option value="conference">Conference Room</option>
-                                        <option value="meeting">Meeting Room</option>
-                                        <option value="training">Training Room</option>
-                                        <option value="auditorium">Auditorium</option>
-                                        <option value="classroom">Classroom</option>
-                                        <option value="other">Other</option>
-                                    </select>
-                                </div>
                             </div>
 
                             <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
@@ -264,7 +244,6 @@
                         <div class="space-y-2 text-sm text-muted-foreground">
                             <p>• Use descriptive names that clearly identify each room</p>
                             <p>• Set accurate capacity limits for booking constraints</p>
-                            <p>• Select appropriate room types for better organization</p>
                             <p>• Include equipment information to help users choose suitable rooms</p>
                             <p>• You can add more rooms and modify details later</p>
                         </div>
@@ -291,16 +270,10 @@ import {
     LoaderCircle,
     HelpCircle,
     AlertCircle,
-    AlertTriangle,
-    Users,
-    Presentation,
-    GraduationCap,
-    Theater,
-    BookOpen,
-    Settings
+    AlertTriangle
 } from 'lucide-vue-next'
 
-import type { OnboardingRoom } from '@/types'
+import type { OnboardingRoom, AvailableBuilding } from '@/types'
 
 // Emits
 const emit = defineEmits<{
@@ -313,7 +286,7 @@ const emit = defineEmits<{
 interface Props {
     loading?: boolean
     existingRooms?: OnboardingRoom[]
-    availableBuildings?: string[]
+    availableBuildings?: AvailableBuilding[]
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -324,7 +297,7 @@ const props = withDefaults(defineProps<Props>(), {
 
 // Reactive state
 const rooms = ref<OnboardingRoom[]>([
-    { name: '', building_name: '', capacity: 10, type: 'conference', description: '', equipment: '' }
+    { name: '', building_id: undefined, capacity: 10, description: '', equipment: '' }
 ])
 
 // Form setup
@@ -337,46 +310,21 @@ const isFormValid = computed(() => {
     return rooms.value.length > 0 && 
            rooms.value.every(room => 
                room.name.trim() !== '' && 
-               room.capacity > 0 &&
-               room.type !== ''
+               room.capacity > 0
            )
 })
 
 const loading = computed(() => props.loading || form.processing)
 
-// Room type utilities
-const getRoomTypeIcon = (type: string) => {
-    const iconMap = {
-        conference: Users,
-        meeting: Users,
-        training: Presentation,
-        auditorium: Theater,
-        classroom: GraduationCap,
-        other: Settings
-    }
-    return iconMap[type as keyof typeof iconMap] || Users
-}
-
-const getRoomTypeLabel = (type: string) => {
-    const labelMap = {
-        conference: 'Conference Room',
-        meeting: 'Meeting Room',
-        training: 'Training Room',
-        auditorium: 'Auditorium',
-        classroom: 'Classroom',
-        other: 'Other Space'
-    }
-    return labelMap[type as keyof typeof labelMap] || 'Room'
-}
 
 // Methods
 const addRoom = () => {
     if (rooms.value.length < 20) {
         rooms.value.push({ 
             name: '', 
-            building_name: '', 
+            building_id: undefined, 
             capacity: 10, 
-            type: 'conference', 
+ 
             description: '', 
             equipment: '' 
         })

@@ -36,10 +36,11 @@
                         <Calendar class="h-4 w-4 text-blue-600" />
                     </CardHeader>
                     <CardContent>
-                        <div class="text-3xl font-bold text-foreground">{{ stats.todays_bookings || 8 }}</div>
-                        <p class="text-xs text-green-600 flex items-center mt-1">
-                            <TrendingUp class="h-3 w-3 mr-1" />
-                            +2 from yesterday
+                        <div class="text-3xl font-bold text-foreground">{{ stats.todays_bookings }}</div>
+                        <p v-if="stats.bookings_change" class="text-xs flex items-center mt-1" :class="stats.bookings_change >= 0 ? 'text-green-600' : 'text-red-600'">
+                            <TrendingUp v-if="stats.bookings_change >= 0" class="h-3 w-3 mr-1" />
+                            <TrendingDown v-else class="h-3 w-3 mr-1" />
+                            {{ stats.bookings_change > 0 ? '+' : '' }}{{ stats.bookings_change }} from yesterday
                         </p>
                     </CardContent>
                 </Card>
@@ -51,10 +52,10 @@
                         <Users class="h-4 w-4 text-green-600" />
                     </CardHeader>
                     <CardContent>
-                        <div class="text-3xl font-bold text-foreground">{{ stats.active_clients || 24 }}</div>
-                        <p class="text-xs text-blue-600 flex items-center mt-1">
+                        <div class="text-3xl font-bold text-foreground">{{ stats.active_clients }}</div>
+                        <p v-if="stats.new_clients_weekly" class="text-xs text-blue-600 flex items-center mt-1">
                             <Clock class="h-3 w-3 mr-1" />
-                            3 new this week
+                            {{ stats.new_clients_weekly }} new this week
                         </p>
                     </CardContent>
                 </Card>
@@ -66,10 +67,10 @@
                         <Building class="h-4 w-4 text-purple-600" />
                     </CardHeader>
                     <CardContent>
-                        <div class="text-3xl font-bold text-foreground">{{ stats.room_utilization || 87 }}%</div>
-                        <p class="text-xs text-green-600 flex items-center mt-1">
+                        <div class="text-3xl font-bold text-foreground">{{ stats.room_utilization }}%</div>
+                        <p v-if="stats.utilization_status" class="text-xs flex items-center mt-1" :class="stats.utilization_status === 'High efficiency' ? 'text-green-600' : 'text-orange-600'">
                             <TrendingUp class="h-3 w-3 mr-1" />
-                            High efficiency
+                            {{ stats.utilization_status }}
                         </p>
                     </CardContent>
                 </Card>
@@ -81,8 +82,8 @@
                         <AlertCircle class="h-4 w-4 text-orange-600" />
                     </CardHeader>
                     <CardContent>
-                        <div class="text-3xl font-bold text-foreground">{{ stats.pending_requests || 6 }}</div>
-                        <p class="text-xs text-orange-600 flex items-center mt-1">
+                        <div class="text-3xl font-bold text-foreground">{{ stats.pending_requests }}</div>
+                        <p v-if="stats.pending_requests > 0" class="text-xs text-orange-600 flex items-center mt-1">
                             <Clock class="h-3 w-3 mr-1" />
                             Needs response
                         </p>
@@ -98,30 +99,34 @@
                         <CardTitle class="text-lg font-semibold">Today's Schedule</CardTitle>
                     </CardHeader>
                     <CardContent>
-                        <div class="space-y-4">
+                        <div class="space-y-4" v-if="todaysSchedule && todaysSchedule.length > 0">
                             <div v-for="booking in todaysSchedule" :key="booking.id"
                                  class="flex items-center justify-between p-4 bg-secondary/50 rounded-lg">
                                 <div class="flex items-center space-x-4">
-                                    <div :class="`h-10 w-10 ${booking.bgColor} rounded-full flex items-center justify-center`">
-                                        <Clock class="h-5 w-5" :class="booking.textColor" />
+                                    <div :class="`h-10 w-10 ${booking.bg_color} rounded-full flex items-center justify-center`">
+                                        <Clock class="h-5 w-5" :class="booking.text_color" />
                                     </div>
                                     <div>
-                                        <p class="font-medium text-foreground">{{ booking.time }}</p>
-                                        <p class="text-sm text-muted-foreground">{{ booking.room }} • {{ booking.client }}</p>
-                                        <p class="text-xs text-muted-foreground">{{ booking.type }}</p>
+                                        <p class="font-medium text-foreground">{{ booking.formatted_time }}</p>
+                                        <p class="text-sm text-muted-foreground">{{ booking.room_name }} • {{ booking.client_name }}</p>
+                                        <p class="text-xs text-muted-foreground">{{ booking.booking_type }}</p>
                                     </div>
                                 </div>
                                 <div class="text-right">
-                                    <span :class="`text-xs px-2 py-1 rounded-full ${booking.statusClass}`">
+                                    <span :class="`text-xs px-2 py-1 rounded-full ${booking.status_class}`">
                                         {{ booking.status }}
                                     </span>
                                     <div class="mt-1">
-                                        <Button size="sm" variant="ghost" class="h-6 px-2 text-xs">
+                                        <Button size="sm" variant="ghost" class="h-6 px-2 text-xs" @click="viewBookingDetails(booking.id)">
                                             Details
                                         </Button>
                                     </div>
                                 </div>
                             </div>
+                        </div>
+                        <div v-else class="text-center py-8 text-muted-foreground">
+                            <Calendar class="h-12 w-12 mx-auto mb-2 opacity-50" />
+                            <p>No bookings scheduled for today</p>
                         </div>
                         <div class="mt-4 pt-4 border-t">
                             <Button variant="ghost" size="sm" class="w-full">
@@ -138,28 +143,32 @@
                         <CardTitle class="text-lg font-semibold">Recent Client Requests</CardTitle>
                     </CardHeader>
                     <CardContent>
-                        <div class="space-y-4">
+                        <div class="space-y-4" v-if="clientRequests && clientRequests.length > 0">
                             <div v-for="request in clientRequests" :key="request.id"
                                  class="flex items-center justify-between p-4 border rounded-lg">
                                 <div class="flex items-center space-x-4">
-                                    <div :class="`h-10 w-10 ${request.bgColor} rounded-lg flex items-center justify-center`">
-                                        <span :class="`${request.textColor} font-semibold text-sm`">{{ request.initials }}</span>
+                                    <div :class="`h-10 w-10 ${request.bg_color} rounded-lg flex items-center justify-center`">
+                                        <span :class="`${request.text_color} font-semibold text-sm`">{{ request.initials }}</span>
                                     </div>
                                     <div>
-                                        <p class="font-medium text-sm">{{ request.client }}</p>
-                                        <p class="text-xs text-muted-foreground">{{ request.room }} • {{ request.date }}</p>
+                                        <p class="font-medium text-sm">{{ request.client_name }}</p>
+                                        <p class="text-xs text-muted-foreground">{{ request.room_name }} • {{ request.formatted_date }}</p>
                                         <p class="text-xs text-muted-foreground">{{ request.duration }}</p>
                                     </div>
                                 </div>
                                 <div class="flex flex-col items-end space-y-1">
-                                    <span :class="`text-xs px-2 py-1 rounded-full ${request.priorityClass}`">
+                                    <span :class="`text-xs px-2 py-1 rounded-full ${request.priority_class}`">
                                         {{ request.priority }}
                                     </span>
-                                    <Button size="sm" variant="outline" class="h-6 px-3 text-xs">
+                                    <Button size="sm" variant="outline" class="h-6 px-3 text-xs" @click="processRequest(request.id)">
                                         Process
                                     </Button>
                                 </div>
                             </div>
+                        </div>
+                        <div v-else class="text-center py-8 text-muted-foreground">
+                            <MessageSquare class="h-12 w-12 mx-auto mb-2 opacity-50" />
+                            <p>No pending client requests</p>
                         </div>
                         <div class="mt-4 pt-4 border-t">
                             <Button variant="ghost" size="sm" class="w-full">
@@ -178,50 +187,54 @@
                     <p class="text-sm text-muted-foreground">Your booking management metrics</p>
                 </CardHeader>
                 <CardContent>
-                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6" v-if="performance">
                         <!-- Booking Success Rate -->
                         <div class="text-center">
-                            <div class="text-3xl font-bold text-green-600">94%</div>
+                            <div class="text-3xl font-bold text-green-600">{{ performance.success_rate || 0 }}%</div>
                             <p class="text-sm text-muted-foreground mt-1">Success Rate</p>
-                            <p class="text-xs text-green-600 mt-1">+2% this month</p>
+                            <p v-if="performance.success_rate_change" class="text-xs mt-1" :class="performance.success_rate_change >= 0 ? 'text-green-600' : 'text-red-600'">
+                                {{ performance.success_rate_change > 0 ? '+' : '' }}{{ performance.success_rate_change }}% this month
+                            </p>
                         </div>
 
                         <!-- Average Response Time -->
                         <div class="text-center">
-                            <div class="text-3xl font-bold text-blue-600">12m</div>
+                            <div class="text-3xl font-bold text-blue-600">{{ performance.avg_response_time || 'N/A' }}</div>
                             <p class="text-sm text-muted-foreground mt-1">Avg Response</p>
-                            <p class="text-xs text-green-600 mt-1">-3m improvement</p>
+                            <p v-if="performance.response_improvement" class="text-xs text-green-600 mt-1">{{ performance.response_improvement }}</p>
                         </div>
 
                         <!-- Client Satisfaction -->
                         <div class="text-center">
-                            <div class="text-3xl font-bold text-purple-600">4.9</div>
+                            <div class="text-3xl font-bold text-purple-600">{{ performance.client_rating || 'N/A' }}</div>
                             <p class="text-sm text-muted-foreground mt-1">Client Rating</p>
-                            <p class="text-xs text-green-600 mt-1">Out of 5.0</p>
+                            <p v-if="performance.rating_max" class="text-xs text-green-600 mt-1">Out of {{ performance.rating_max }}</p>
                         </div>
 
                         <!-- Bookings This Month -->
                         <div class="text-center">
-                            <div class="text-3xl font-bold text-orange-600">127</div>
+                            <div class="text-3xl font-bold text-orange-600">{{ performance.monthly_bookings || 0 }}</div>
                             <p class="text-sm text-muted-foreground mt-1">Monthly Total</p>
-                            <p class="text-xs text-green-600 mt-1">+15% growth</p>
+                            <p v-if="performance.monthly_growth" class="text-xs mt-1" :class="performance.monthly_growth >= 0 ? 'text-green-600' : 'text-red-600'">
+                                {{ performance.monthly_growth > 0 ? '+' : '' }}{{ performance.monthly_growth }}% growth
+                            </p>
                         </div>
                     </div>
 
                     <!-- Quick Client Management -->
-                    <div class="mt-6 pt-6 border-t">
+                    <div class="mt-6 pt-6 border-t" v-if="clientSummary">
                         <h4 class="font-medium text-sm mb-4">Quick Client Management</h4>
                         <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                             <div class="p-3 border rounded-lg text-center">
-                                <div class="text-lg font-bold text-blue-600">8</div>
+                                <div class="text-lg font-bold text-blue-600">{{ clientSummary.vip_clients || 0 }}</div>
                                 <p class="text-xs text-muted-foreground">VIP Clients</p>
                             </div>
                             <div class="p-3 border rounded-lg text-center">
-                                <div class="text-lg font-bold text-green-600">16</div>
+                                <div class="text-lg font-bold text-green-600">{{ clientSummary.regular_clients || 0 }}</div>
                                 <p class="text-xs text-muted-foreground">Regular Clients</p>
                             </div>
                             <div class="p-3 border rounded-lg text-center">
-                                <div class="text-lg font-bold text-orange-600">3</div>
+                                <div class="text-lg font-bold text-orange-600">{{ clientSummary.new_clients || 0 }}</div>
                                 <p class="text-xs text-muted-foreground">New Clients</p>
                             </div>
                         </div>
@@ -252,108 +265,63 @@ import {
 
 interface Props {
     user: any
-    stats?: {
+    stats: {
         todays_bookings: number
+        bookings_change?: number
         active_clients: number
+        new_clients_weekly?: number
         room_utilization: number
+        utilization_status?: string
         pending_requests: number
+    }
+    todaysSchedule?: Array<{
+        id: number
+        formatted_time: string
+        room_name: string
+        client_name: string
+        booking_type: string
+        status: string
+        status_class: string
+        bg_color: string
+        text_color: string
+    }>
+    clientRequests?: Array<{
+        id: number
+        client_name: string
+        room_name: string
+        formatted_date: string
+        duration: string
+        priority: string
+        priority_class: string
+        initials: string
+        bg_color: string
+        text_color: string
+    }>
+    performance?: {
+        success_rate: number
+        success_rate_change?: number
+        avg_response_time: string
+        response_improvement?: string
+        client_rating: number | string
+        rating_max?: number
+        monthly_bookings: number
+        monthly_growth?: number
+    }
+    clientSummary?: {
+        vip_clients: number
+        regular_clients: number
+        new_clients: number
     }
 }
 
-const props = withDefaults(defineProps<Props>(), {
-    stats: () => ({
-        todays_bookings: 8,
-        active_clients: 24,
-        room_utilization: 87,
-        pending_requests: 6
-    })
-})
+const props = defineProps<Props>()
 
-// Mock data for today's schedule
-const todaysSchedule = [
-    {
-        id: 1,
-        time: '9:00 AM - 10:30 AM',
-        room: 'Conference A',
-        client: 'Tech Corp',
-        type: 'Board Meeting',
-        status: 'Confirmed',
-        statusClass: 'bg-green-100 text-green-700',
-        bgColor: 'bg-green-100',
-        textColor: 'text-green-600'
-    },
-    {
-        id: 2,
-        time: '11:00 AM - 12:00 PM',
-        room: 'Meeting B',
-        client: 'Design Studio',
-        type: 'Client Review',
-        status: 'Confirmed',
-        statusClass: 'bg-green-100 text-green-700',
-        bgColor: 'bg-blue-100',
-        textColor: 'text-blue-600'
-    },
-    {
-        id: 3,
-        time: '2:00 PM - 3:30 PM',
-        room: 'Training Room',
-        client: 'Marketing Inc',
-        type: 'Workshop',
-        status: 'Pending',
-        statusClass: 'bg-yellow-100 text-yellow-700',
-        bgColor: 'bg-yellow-100',
-        textColor: 'text-yellow-600'
-    },
-    {
-        id: 4,
-        time: '4:00 PM - 5:00 PM',
-        room: 'Board Room',
-        client: 'Finance Ltd',
-        type: 'Presentation',
-        status: 'Confirmed',
-        statusClass: 'bg-green-100 text-green-700',
-        bgColor: 'bg-purple-100',
-        textColor: 'text-purple-600'
-    }
-]
+// Methods for handling actions
+const viewBookingDetails = (bookingId: number) => {
+    console.log('Viewing booking details:', bookingId)
+}
 
-// Mock data for client requests
-const clientRequests = [
-    {
-        id: 1,
-        client: 'Global Enterprises',
-        room: 'Conference A',
-        date: 'Tomorrow',
-        duration: '2 hours',
-        priority: 'High',
-        priorityClass: 'bg-red-100 text-red-700',
-        initials: 'GE',
-        bgColor: 'bg-red-100',
-        textColor: 'text-red-600'
-    },
-    {
-        id: 2,
-        client: 'Creative Agency',
-        room: 'Meeting B',
-        date: 'Jan 28',
-        duration: '1.5 hours',
-        priority: 'Medium',
-        priorityClass: 'bg-yellow-100 text-yellow-700',
-        initials: 'CA',
-        bgColor: 'bg-yellow-100',
-        textColor: 'text-yellow-600'
-    },
-    {
-        id: 3,
-        client: 'StartupXYZ',
-        room: 'Training Room',
-        date: 'Jan 29',
-        duration: '3 hours',
-        priority: 'Low',
-        priorityClass: 'bg-green-100 text-green-700',
-        initials: 'SX',
-        bgColor: 'bg-green-100',
-        textColor: 'text-green-600'
-    }
-]
+const processRequest = (requestId: number) => {
+    console.log('Processing request:', requestId)
+}
 </script>

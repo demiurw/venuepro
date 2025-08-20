@@ -156,7 +156,7 @@
                                     </Label>
                                     <select
                                         :id="`user-group-${index}`"
-                                        v-model="user.group_name"
+                                        v-model="user.group_id"
                                         :disabled="loading || !availableGroups.length"
                                         :required="isGroupRequired(user.user_type)"
                                         :class="[
@@ -165,8 +165,8 @@
                                         ]"
                                     >
                                         <option value="">{{ isGroupRequired(user.user_type) ? 'Select Group' : 'No Group' }}</option>
-                                        <option v-for="group in availableGroups" :key="group" :value="group">
-                                            {{ group }}
+                                        <option v-for="group in availableGroups" :key="group.id" :value="group.id">
+                                            {{ group.name }}
                                         </option>
                                     </select>
                                 </div>
@@ -326,7 +326,7 @@ import {
     User
 } from 'lucide-vue-next'
 
-import type { OnboardingUser } from '@/types'
+import type { OnboardingUser, AvailableGroup } from '@/types'
 
 // Emits
 const emit = defineEmits<{
@@ -339,7 +339,7 @@ const emit = defineEmits<{
 interface Props {
     loading?: boolean
     existingUsers?: OnboardingUser[]
-    availableGroups?: string[]
+    availableGroups?: AvailableGroup[]
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -350,7 +350,7 @@ const props = withDefaults(defineProps<Props>(), {
 
 // Reactive state
 const users = ref<OnboardingUser[]>([
-    { first_name: '', last_name: '', email: '', user_type: 'invitee', group_name: '' }
+    { first_name: '', last_name: '', email: '', user_type: 'invitee', group_id: undefined }
 ])
 
 // Form setup
@@ -367,7 +367,7 @@ const isFormValid = computed(() => {
                user.email.trim() !== '' &&
                user.email.includes('@') &&
                user.user_type !== '' &&
-               (!isGroupRequired(user.user_type) || user.group_name !== '')
+               (!isGroupRequired(user.user_type) || user.group_id !== undefined)
            )
 })
 
@@ -413,7 +413,7 @@ const addUser = () => {
             last_name: '', 
             email: '', 
             user_type: 'invitee', 
-            group_name: '' 
+            group_id: undefined 
         })
         form.users = users.value
     }

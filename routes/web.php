@@ -137,6 +137,8 @@ Route::middleware([
     RoleAccessMiddleware::class . ':hod'
 ])->prefix('hod')->name('hod.')->group(function () {
     Route::get('/dashboard', [HodDashboardController::class, 'index'])->name('dashboard');
+    Route::post('/dashboard/approve/{booking}', [HodDashboardController::class, 'approveRequest'])->name('dashboard.approve');
+    Route::post('/dashboard/reject/{booking}', [HodDashboardController::class, 'rejectRequest'])->name('dashboard.reject');
 
     // Department management
     Route::get('/team', [HodDashboardController::class, 'team'])->name('team');

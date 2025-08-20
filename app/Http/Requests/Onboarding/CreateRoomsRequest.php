@@ -33,7 +33,6 @@ class CreateRoomsRequest extends FormRequest
                 })
             ],
             'rooms.*.capacity' => 'required|integer|min:1|max:1000',
-            'rooms.*.type' => 'required|string|max:100',
         ];
     }
 
@@ -53,8 +52,6 @@ class CreateRoomsRequest extends FormRequest
             'rooms.*.capacity.required' => 'Room capacity is required.',
             'rooms.*.capacity.min' => 'Room capacity must be at least 1.',
             'rooms.*.capacity.max' => 'Room capacity cannot exceed 1000.',
-            'rooms.*.type.required' => 'Room type is required.',
-            'rooms.*.type.max' => 'Room type cannot exceed 100 characters.',
         ];
     }
 
@@ -67,7 +64,6 @@ class CreateRoomsRequest extends FormRequest
             'rooms.*.name' => 'room name',
             'rooms.*.building_id' => 'building',
             'rooms.*.capacity' => 'room capacity',
-            'rooms.*.type' => 'room type',
         ];
     }
 }

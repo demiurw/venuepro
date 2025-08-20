@@ -16,7 +16,6 @@ class Room extends Model
         'name',
         'building_id',
         'capacity',
-        'type',
         'company_id',
     ];
 

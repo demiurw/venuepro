@@ -30,22 +30,20 @@ class OnboardingMiddleware
                 return $next($request);
             }
 
-            $companyId = $user->company_id;
+            // Check if user has completed all onboarding steps (step 5 is the last step)
+            if ($user->onboarding_step_completed < 5) {
+                // Determine which step to redirect to based on progress
+                $step = $user->onboarding_step_completed + 1;
+                $stepRoutes = [
+                    1 => 'onboarding.buildings',
+                    2 => 'onboarding.rooms',
+                    3 => 'onboarding.groups',
+                    4 => 'onboarding.users',
+                    5 => 'onboarding.labels',
+                ];
 
-            // Check if company has completed onboarding requirements
-            $hasBuilding = Building::where('company_id', $companyId)->exists();
-            $hasRoom = Room::where('company_id', $companyId)->exists();
-            $hasGroup = Group::where('company_id', $companyId)
-                ->where('is_active', true)
-                ->exists();
-            $hasOtherUser = User::where('company_id', $companyId)
-                ->where('id', '!=', $user->id)
-                ->whereIn('user_type', ['booking_agent', 'hod', 'invitee'])
-                ->exists();
-
-            // Redirect to onboarding if any requirement is missing
-            if (!$hasBuilding || !$hasRoom || !$hasGroup || !$hasOtherUser) {
-                return redirect()->route('onboarding.buildings');
+                $routeName = $stepRoutes[$step] ?? 'onboarding.buildings';
+                return redirect()->route($routeName);
             }
         }
 

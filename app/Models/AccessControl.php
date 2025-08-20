@@ -11,11 +11,16 @@ class AccessControl extends Model
     use HasFactory, BelongsToTenant;
 
     protected $table = 'access_control';
+    
+    const UPDATED_AT = null; // Disable updated_at
+    
+    protected $dates = ['created_at'];
 
     protected $fillable = [
         'group_id',
-        'resource_id',
-        'resource_type', // e.g., 'App\\Models\\Room'
+        'entity_id',
+        'entity_type', // e.g., 'room', 'building'
+        'access_level', // 'view', 'book', 'manage'
         'company_id',
     ];
 
@@ -24,8 +29,13 @@ class AccessControl extends Model
         return $this->belongsTo(Group::class);
     }
 
-    public function resource()
+    public function room()
     {
-        return $this->morphTo();
+        return $this->belongsTo(Room::class, 'entity_id')->where('entity_type', 'room');
+    }
+
+    public function building()
+    {
+        return $this->belongsTo(Building::class, 'entity_id')->where('entity_type', 'building');
     }
 }

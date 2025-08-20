@@ -8,6 +8,7 @@ use App\Models\Group;
 use App\Models\User;
 use App\Models\AccessControl;
 use App\Models\Company;
+use Spatie\Permission\Models\Role;
 use App\Enums\UserStatus;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -20,16 +21,11 @@ class OnboardingService
      */
     public function isOnboardingComplete(int $companyId): bool
     {
-        $hasBuilding = Building::where('company_id', $companyId)->exists();
-        $hasRoom = Room::where('company_id', $companyId)->exists();
-        $hasGroup = Group::where('company_id', $companyId)
-            ->where('is_active', true)
-            ->exists();
-        $hasOtherUser = User::where('company_id', $companyId)
-            ->whereIn('user_type', ['booking_agent', 'hod', 'invitee'])
-            ->exists();
+        $systemAdmin = User::where('company_id', $companyId)
+            ->where('user_type', 'system_admin')
+            ->first();
 
-        return $hasBuilding && $hasRoom && $hasGroup && $hasOtherUser;
+        return $systemAdmin && $systemAdmin->onboarding_step_completed >= 5;
     }
 
     /**
@@ -37,13 +33,20 @@ class OnboardingService
      */
     public function getOnboardingProgress(int $companyId): array
     {
+        $systemAdmin = User::where('company_id', $companyId)
+            ->where('user_type', 'system_admin')
+            ->first();
+
+        $stepCompleted = $systemAdmin ? $systemAdmin->onboarding_step_completed : 0;
+
         return [
-            'buildings' => Building::where('company_id', $companyId)->exists(),
-            'rooms' => Room::where('company_id', $companyId)->exists(),
-            'groups' => Group::where('company_id', $companyId)->where('is_active', true)->exists(),
-            'users' => User::where('company_id', $companyId)
-                ->whereIn('user_type', ['booking_agent', 'hod', 'invitee'])
-                ->exists(),
+            'buildings' => $stepCompleted >= 1,
+            'rooms' => $stepCompleted >= 2,
+            'groups' => $stepCompleted >= 3,
+            'users' => $stepCompleted >= 4,
+            'labels' => $stepCompleted >= 5,
+            'current_step' => $stepCompleted,
+            'next_step' => $stepCompleted < 5 ? $stepCompleted + 1 : null,
         ];
     }
 
@@ -59,13 +62,24 @@ class OnboardingService
             foreach ($buildingsData as $buildingData) {
                 $building = Building::create([
                     'name' => $buildingData['name'],
-                    'address' => $buildingData['address'],
+                    'description' => $buildingData['description'] ?? null,
+                    'address_line1' => $buildingData['address_line1'],
+                    'address_line2' => $buildingData['address_line2'] ?? null,
+                    'city' => $buildingData['city'],
+                    'state_id' => $buildingData['state_id'] ?? null,
+                    'country_id' => $buildingData['country_id'],
+                    'postal_code' => $buildingData['postal_code'] ?? null,
+                    'timezone' => $buildingData['timezone'] ?? 'UTC',
                     'company_id' => $user->company_id,
                 ]);
                 $createdBuildings[] = $building;
             }
 
             DB::commit();
+
+            // Update user's onboarding step to step 1 completed
+            $user->onboarding_step_completed = 1;
+            $user->save();
 
             Log::info('Buildings created during onboarding', [
                 'user_id' => $user->id,
@@ -108,7 +122,6 @@ class OnboardingService
                     'name' => $roomData['name'],
                     'building_id' => $roomData['building_id'],
                     'capacity' => $roomData['capacity'],
-                    'type' => $roomData['type'],
                     'company_id' => $user->company_id,
                 ]);
                 $createdRooms[] = $room;
@@ -116,6 +129,10 @@ class OnboardingService
 
             // Automatically assign booking permissions to all active groups
             $this->assignRoomPermissionsToGroups($user->company_id, $createdRooms);
+
+            // Update user's onboarding step to step 2 completed
+            $user->onboarding_step_completed = 2;
+            $user->save();
 
             DB::commit();
 
@@ -169,6 +186,10 @@ class OnboardingService
             // Automatically assign permissions for existing rooms
             $this->assignExistingRoomsToGroups($user->company_id, $createdGroups);
 
+            // Update user's onboarding step to step 3 completed
+            $user->onboarding_step_completed = 3;
+            $user->save();
+
             DB::commit();
 
             Log::info('Groups created during onboarding', [
@@ -203,10 +224,11 @@ class OnboardingService
      */
     public function createUsers(User $currentUser, array $usersData): array
     {
+        // Map user types to role names
         $userTypeToRoleMapping = [
-            'hod' => 1,
-            'booking_agent' => 4,
-            'invitee' => 3,
+            'hod' => 'Head of Department',
+            'booking_agent' => 'Booking Agent',
+            'invitee' => 'Invitee',
         ];
 
         try {
@@ -214,14 +236,19 @@ class OnboardingService
 
             $createdUsers = [];
             foreach ($usersData as $userData) {
-                $roleId = $userTypeToRoleMapping[$userData['user_type']];
+                $roleName = $userTypeToRoleMapping[$userData['user_type']];
+                $role = Role::where('name', $roleName)->first();
+                
+                if (!$role) {
+                    throw new Exception("Role '{$roleName}' not found for user type '{$userData['user_type']}'");
+                }
 
                 $newUser = User::create([
                     'first_name' => $userData['first_name'],
                     'last_name' => $userData['last_name'],
                     'email' => $userData['email'],
                     'user_type' => $userData['user_type'],
-                    'role_id' => $roleId,
+                    'role_id' => $role->id,
                     'group_id' => $userData['group_id'] ?? null,
                     'company_id' => $currentUser->company_id,
                     'status' => UserStatus::PENDING,
@@ -229,6 +256,10 @@ class OnboardingService
                 ]);
                 $createdUsers[] = $newUser;
             }
+
+            // Update user's onboarding step to step 4 completed
+            $currentUser->onboarding_step_completed = 4;
+            $currentUser->save();
 
             DB::commit();
 
@@ -267,28 +298,18 @@ class OnboardingService
         try {
             DB::beginTransaction();
 
-            // Save labels to company_labels table or update company preferences
-            // This depends on your database structure for company labels
-            // For now, I'll assume we're updating the company record or storing in a separate table
-            
             $company = Company::find($user->company_id);
             if (!$company) {
                 throw new Exception('Company not found');
             }
 
-            // Store labels in a JSON column or separate table
-            // Assuming company has a labels column
-            DB::table('company_labels')->where('company_id', $user->company_id)->delete();
-            
-            foreach ($labelsData as $label) {
-                DB::table('company_labels')->insert([
-                    'company_id' => $user->company_id,
-                    'label_type' => $label['type'],
-                    'label_value' => $label['value'],
-                    'created_at' => now(),
-                    'updated_at' => now(),
-                ]);
-            }
+            // Store labels in the custom_labels JSON column
+            $company->custom_labels = $labelsData;
+            $company->save();
+
+            // Update user's onboarding step to completed (step 5)
+            $user->onboarding_step_completed = 5;
+            $user->save();
 
             DB::commit();
 
@@ -300,7 +321,7 @@ class OnboardingService
 
             return [
                 'success' => true,
-                'message' => 'Company labels saved successfully.',
+                'message' => 'Company labels saved successfully. Onboarding completed!',
                 'data' => $labelsData,
             ];
         } catch (Exception $e) {
@@ -325,8 +346,25 @@ class OnboardingService
     public function getAvailableBuildings(int $companyId): array
     {
         return Building::where('company_id', $companyId)
-            ->select('id', 'name', 'address')
-            ->get()
+            ->with(['state', 'country'])
+            ->get(['id', 'name', 'address_line1', 'address_line2', 'city', 'state_id', 'country_id', 'postal_code'])
+            ->map(function ($building) {
+                // Create a formatted address string
+                $addressParts = array_filter([
+                    $building->address_line1,
+                    $building->address_line2,
+                    $building->city,
+                    $building->state ? $building->state->name : null,
+                    $building->postal_code,
+                    $building->country ? $building->country->name : null,
+                ]);
+                
+                return [
+                    'id' => $building->id,
+                    'name' => $building->name,
+                    'address' => implode(', ', $addressParts),
+                ];
+            })
             ->toArray();
     }
 
@@ -355,8 +393,9 @@ class OnboardingService
             foreach ($groups as $group) {
                 AccessControl::create([
                     'group_id' => $group->id,
-                    'resource_id' => $room->id,
-                    'resource_type' => Room::class,
+                    'entity_id' => $room->id,
+                    'entity_type' => 'room',
+                    'access_level' => 'book',
                     'company_id' => $companyId,
                 ]);
             }
@@ -374,8 +413,9 @@ class OnboardingService
             foreach ($rooms as $room) {
                 AccessControl::create([
                     'group_id' => $group->id,
-                    'resource_id' => $room->id,
-                    'resource_type' => Room::class,
+                    'entity_id' => $room->id,
+                    'entity_type' => 'room',
+                    'access_level' => 'book',
                     'company_id' => $companyId,
                 ]);
             }

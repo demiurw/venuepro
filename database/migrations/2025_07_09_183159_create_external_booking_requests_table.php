@@ -24,7 +24,7 @@ class CreateExternalBookingRequestsTable extends Migration
             $table->integer('attendee_count')->default(1);
             $table->enum('status', ['pending', 'approved', 'denied', 'cancelled'])->default('pending');
             $table->foreignId('approved_by')->nullable()->constrained('users');
-            $table->foreignId('booking_id')->nullable()->constrained('booking');
+            $table->foreignId('booking_id')->nullable()->constrained('bookings');
             $table->string('token', 100)->unique();
             $table->timestamps();
             $table->softDeletes();

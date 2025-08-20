@@ -5,9 +5,9 @@
             <div class="inline-flex items-center justify-center w-16 h-16 bg-primary/10 rounded-full mb-4">
                 <Tags class="h-8 w-8 text-primary" />
             </div>
-            <h3 class="text-xl font-semibold text-foreground mb-2">Create Booking Labels</h3>
+            <h3 class="text-xl font-semibold text-foreground mb-2">Create Resource Labels</h3>
             <p class="text-muted-foreground">
-                Add labels to categorize and organize your bookings. These help users quickly identify booking types and purposes. You can create 1-20 labels.
+                Create custom labels to categorize and organize your company resources. These labels can be applied to buildings, rooms, users, and groups for better organization and identification. You can create 1-20 labels.
             </p>
         </div>
 
@@ -16,7 +16,7 @@
             <!-- Labels List -->
             <div class="space-y-4">
                 <div class="flex items-center justify-between">
-                    <Label class="text-lg font-medium text-foreground">Booking Categories</Label>
+                    <Label class="text-lg font-medium text-foreground">Resource Labels</Label>
                     <Button
                         type="button"
                         variant="outline"
@@ -55,7 +55,9 @@
                                                 class="w-3 h-3 rounded-full"
                                                 :style="{ backgroundColor: label.color }"
                                             ></div>
-                                            <span class="text-sm text-muted-foreground">{{ label.color }}</span>
+                                            <span class="text-sm text-muted-foreground">
+                                                {{ label.applicable_to ? label.applicable_to.join(', ') : 'No resources selected' }}
+                                            </span>
                                         </div>
                                     </div>
                                 </div>
@@ -81,7 +83,7 @@
                                     <Input
                                         :id="`label-name-${index}`"
                                         v-model="label.name"
-                                        placeholder="e.g. Client Meeting, Training Session"
+                                        placeholder="e.g. VIP, Priority, Restricted, Department"
                                         :disabled="loading"
                                         required
                                         class="h-11 rounded-xl border-border/60 focus:border-primary/60"
@@ -119,6 +121,27 @@
                                             ></button>
                                         </div>
                                     </div>
+                                </div>
+                            </div>
+
+                            <!-- Applicable Resources -->
+                            <div class="space-y-2 mb-4">
+                                <Label class="text-sm font-medium">Apply to Resources *</Label>
+                                <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+                                    <label
+                                        v-for="resourceType in ['buildings', 'rooms', 'users', 'groups']"
+                                        :key="resourceType"
+                                        class="flex items-center space-x-2 cursor-pointer p-2 rounded-lg hover:bg-muted/50 transition-colors"
+                                    >
+                                        <input
+                                            type="checkbox"
+                                            :checked="label.applicable_to?.includes(resourceType)"
+                                            @change="toggleResourceType(index, resourceType)"
+                                            :disabled="loading"
+                                            class="rounded border-border text-primary focus:ring-primary/20"
+                                        >
+                                        <span class="text-sm font-medium capitalize">{{ resourceType }}</span>
+                                    </label>
                                 </div>
                             </div>
 
@@ -168,7 +191,7 @@
                                         {{ label.name }}
                                     </div>
                                     <span class="text-xs text-muted-foreground">
-                                        How it will appear on bookings
+                                        How it will appear on resources ({{ label.applicable_to?.join(', ') || 'Select resources above' }})
                                     </span>
                                 </div>
                             </div>
@@ -214,7 +237,7 @@
                     <div>
                         <h4 class="text-sm font-semibold text-success mb-1">Almost Done!</h4>
                         <p class="text-xs text-success/80">
-                            After creating these labels, your VenuePro setup will be complete and you'll be redirected to your dashboard.
+                            After creating these resource labels, your VenuePro setup will be complete. These labels will be available for organizing your buildings, rooms, users, and groups throughout the system.
                         </p>
                     </div>
                 </div>
@@ -267,13 +290,14 @@
                         <HelpCircle class="h-5 w-5 text-primary" />
                     </div>
                     <div>
-                        <h3 class="font-semibold text-foreground mb-2">Label Usage Examples</h3>
+                        <h3 class="font-semibold text-foreground mb-2">Resource Label Examples</h3>
                         <div class="space-y-2 text-sm text-muted-foreground">
-                            <p>• <strong>Meeting Types:</strong> Client Meeting, Team Standup, One-on-One, Board Meeting</p>
-                            <p>• <strong>Events:</strong> Training Session, Workshop, Presentation, Conference</p>
-                            <p>• <strong>Purposes:</strong> Interview, Demo, Planning, Review</p>
-                            <p>• <strong>Departments:</strong> HR Meeting, IT Support, Sales Call, Marketing Review</p>
-                            <p>• Choose distinct colors to make labels easily recognizable at a glance</p>
+                            <p>• <strong>Access Levels:</strong> VIP, Priority, Restricted, Public Access</p>
+                            <p>• <strong>Departments:</strong> Engineering, Marketing, HR, Finance, Executive</p>
+                            <p>• <strong>Building Types:</strong> Main Office, Satellite Office, Storage, Production</p>
+                            <p>• <strong>Room Categories:</strong> Conference, Training, Phone Booth, Kitchen, Lounge</p>
+                            <p>• <strong>User Classifications:</strong> Executive, Manager, Staff, Contractor, Visitor</p>
+                            <p>• Choose distinct colors to make labels easily recognizable across all resources</p>
                         </div>
                     </div>
                 </div>
@@ -323,7 +347,7 @@ const props = withDefaults(defineProps<Props>(), {
 
 // Reactive state
 const labels = ref<OnboardingLabel[]>([
-    { name: '', color: '#3B82F6', description: '' }
+    { name: '', color: '#3B82F6', description: '', applicable_to: [], is_active: true }
 ])
 
 // Form setup
@@ -349,14 +373,14 @@ const colorPresets = [
 
 // Label examples for quick setup
 const labelExamples = [
-    { name: 'Client Meeting', color: '#3B82F6', description: 'Meetings with external clients and stakeholders' },
-    { name: 'Team Meeting', color: '#10B981', description: 'Internal team discussions and updates' },
-    { name: 'Training Session', color: '#F59E0B', description: 'Educational and skill development sessions' },
-    { name: 'Interview', color: '#8B5CF6', description: 'Job interviews and candidate evaluations' },
-    { name: 'Presentation', color: '#EC4899', description: 'Formal presentations and demos' },
-    { name: 'Workshop', color: '#06B6D4', description: 'Interactive learning and collaboration sessions' },
-    { name: 'Board Meeting', color: '#EF4444', description: 'Executive and board-level meetings' },
-    { name: 'Social Event', color: '#84CC16', description: 'Company social gatherings and celebrations' }
+    { name: 'VIP', color: '#EF4444', description: 'High-priority resources requiring special access', applicable_to: ['buildings', 'rooms', 'users'] },
+    { name: 'Executive', color: '#8B5CF6', description: 'Executive-level resources and personnel', applicable_to: ['rooms', 'users', 'groups'] },
+    { name: 'Public Access', color: '#10B981', description: 'Resources available for general use', applicable_to: ['buildings', 'rooms'] },
+    { name: 'Engineering', color: '#3B82F6', description: 'Engineering department resources', applicable_to: ['rooms', 'users', 'groups'] },
+    { name: 'Training', color: '#F59E0B', description: 'Training and educational resources', applicable_to: ['rooms', 'groups'] },
+    { name: 'Restricted', color: '#DC2626', description: 'Restricted access resources', applicable_to: ['buildings', 'rooms', 'users'] },
+    { name: 'Satellite Office', color: '#06B6D4', description: 'Remote office locations', applicable_to: ['buildings'] },
+    { name: 'Contractor', color: '#84CC16', description: 'External contractor access', applicable_to: ['users', 'groups'] }
 ]
 
 // Computed properties
@@ -364,7 +388,8 @@ const isFormValid = computed(() => {
     return labels.value.length > 0 && 
            labels.value.every(label => 
                label.name.trim() !== '' && 
-               label.color !== ''
+               label.color !== '' &&
+               label.applicable_to && label.applicable_to.length > 0
            )
 })
 
@@ -383,7 +408,9 @@ const addLabel = () => {
         labels.value.push({ 
             name: '', 
             color: newColor, 
-            description: '' 
+            description: '',
+            applicable_to: [],
+            is_active: true 
         })
         form.labels = labels.value
     }
@@ -396,10 +423,26 @@ const removeLabel = (index: number) => {
     }
 }
 
-const applyLabelExample = (index: number, example: { name: string; color: string; description: string }) => {
+const toggleResourceType = (index: number, resourceType: string) => {
+    const label = labels.value[index]
+    if (!label.applicable_to) {
+        label.applicable_to = []
+    }
+    
+    const typeIndex = label.applicable_to.indexOf(resourceType as any)
+    if (typeIndex > -1) {
+        label.applicable_to.splice(typeIndex, 1)
+    } else {
+        label.applicable_to.push(resourceType as any)
+    }
+    form.labels = labels.value
+}
+
+const applyLabelExample = (index: number, example: { name: string; color: string; description: string; applicable_to: string[] }) => {
     labels.value[index].name = example.name
     labels.value[index].color = example.color
     labels.value[index].description = example.description
+    labels.value[index].applicable_to = [...example.applicable_to] as any
     form.labels = labels.value
 }
 

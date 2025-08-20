@@ -22,12 +22,12 @@ class SaveLabelsRequest extends FormRequest
     {
         return [
             'labels' => 'required|array|min:1|max:20',
-            'labels.*.type' => [
-                'required',
-                'string',
-                Rule::in(['department', 'division', 'team', 'category', 'location', 'custom'])
-            ],
-            'labels.*.value' => 'required|string|max:255',
+            'labels.*.name' => 'required|string|max:255',
+            'labels.*.color' => 'required|string|regex:/^#[0-9A-Fa-f]{6}$/',
+            'labels.*.description' => 'nullable|string|max:500',
+            'labels.*.applicable_to' => 'required|array|min:1',
+            'labels.*.applicable_to.*' => 'string|in:buildings,rooms,users,groups',
+            'labels.*.is_active' => 'boolean',
         ];
     }
 
@@ -40,10 +40,14 @@ class SaveLabelsRequest extends FormRequest
             'labels.required' => 'At least one label is required.',
             'labels.min' => 'At least one label must be provided.',
             'labels.max' => 'Maximum 20 labels can be saved at once.',
-            'labels.*.type.required' => 'Label type is required.',
-            'labels.*.type.in' => 'Label type must be one of: department, division, team, category, location, or custom.',
-            'labels.*.value.required' => 'Label value is required.',
-            'labels.*.value.max' => 'Label value cannot exceed 255 characters.',
+            'labels.*.name.required' => 'Label name is required.',
+            'labels.*.name.max' => 'Label name cannot exceed 255 characters.',
+            'labels.*.color.required' => 'Label color is required.',
+            'labels.*.color.regex' => 'Label color must be a valid hex color code (e.g., #FF0000).',
+            'labels.*.description.max' => 'Label description cannot exceed 500 characters.',
+            'labels.*.applicable_to.required' => 'At least one resource type must be selected.',
+            'labels.*.applicable_to.min' => 'At least one resource type must be selected.',
+            'labels.*.applicable_to.*.in' => 'Resource type must be one of: buildings, rooms, users, groups.',
         ];
     }
 
@@ -53,8 +57,10 @@ class SaveLabelsRequest extends FormRequest
     public function attributes(): array
     {
         return [
-            'labels.*.type' => 'label type',
-            'labels.*.value' => 'label value',
+            'labels.*.name' => 'label name',
+            'labels.*.color' => 'label color',
+            'labels.*.description' => 'label description',
+            'labels.*.applicable_to' => 'applicable resources',
         ];
     }
 
@@ -65,16 +71,16 @@ class SaveLabelsRequest extends FormRequest
     {
         $validator->after(function ($validator) {
             $labels = $this->input('labels', []);
-            $labelCombinations = [];
+            $labelNames = [];
             
-            // Check for duplicate type-value combinations
+            // Check for duplicate label names
             foreach ($labels as $index => $label) {
-                if (isset($label['type']) && isset($label['value'])) {
-                    $combination = $label['type'] . '|' . $label['value'];
-                    if (in_array($combination, $labelCombinations)) {
-                        $validator->errors()->add("labels.{$index}", 'Duplicate label type and value combination.');
+                if (isset($label['name'])) {
+                    $name = strtolower(trim($label['name']));
+                    if (in_array($name, $labelNames)) {
+                        $validator->errors()->add("labels.{$index}.name", 'Duplicate label name. Each label must have a unique name.');
                     }
-                    $labelCombinations[] = $combination;
+                    $labelNames[] = $name;
                 }
             }
         });

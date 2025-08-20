@@ -31,14 +31,14 @@
                 </div>
 
                 <!-- Building Cards -->
-                <div class="grid gap-4">
+                <div class="grid gap-6">
                     <Card 
                         v-for="(building, index) in buildings" 
                         :key="index"
                         class="border-border/50 hover:border-primary/30 transition-colors"
                     >
                         <CardContent class="p-6">
-                            <div class="flex items-start justify-between mb-4">
+                            <div class="flex items-start justify-between mb-6">
                                 <div class="flex items-center gap-3">
                                     <div class="flex items-center justify-center w-8 h-8 bg-primary/10 rounded-lg">
                                         <Building2 class="h-4 w-4 text-primary" />
@@ -61,8 +61,8 @@
                                 </Button>
                             </div>
 
-                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <!-- Building Name -->
+                            <!-- Building Name and Description -->
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
                                 <div class="space-y-2">
                                     <Label :for="`building-name-${index}`" class="text-sm font-medium">
                                         Building Name *
@@ -75,46 +75,167 @@
                                         required
                                         class="h-11 rounded-xl border-border/60 focus:border-primary/60"
                                     />
-                                    <p class="text-xs text-muted-foreground">
-                                        A descriptive name for this building
-                                    </p>
                                 </div>
 
-                                <!-- Building Address -->
                                 <div class="space-y-2">
-                                    <Label :for="`building-address-${index}`" class="text-sm font-medium">
-                                        Address *
+                                    <Label :for="`building-description-${index}`" class="text-sm font-medium">
+                                        Description (Optional)
                                     </Label>
                                     <Input
-                                        :id="`building-address-${index}`"
-                                        v-model="building.address"
-                                        placeholder="e.g. 123 Business St, City, State"
+                                        :id="`building-description-${index}`"
+                                        v-model="building.description"
+                                        placeholder="Brief description of this building"
                                         :disabled="loading"
-                                        required
                                         class="h-11 rounded-xl border-border/60 focus:border-primary/60"
                                     />
-                                    <p class="text-xs text-muted-foreground">
-                                        Full address including street, city, state
-                                    </p>
                                 </div>
                             </div>
 
-                            <!-- Description (Full Width) -->
-                            <div class="mt-4 space-y-2">
-                                <Label :for="`building-description-${index}`" class="text-sm font-medium">
-                                    Description (Optional)
-                                </Label>
-                                <textarea
-                                    :id="`building-description-${index}`"
-                                    v-model="building.description"
-                                    placeholder="Additional details about this building..."
-                                    :disabled="loading"
-                                    rows="3"
-                                    class="w-full px-3 py-2 rounded-xl border border-border/60 bg-background text-foreground placeholder-muted-foreground focus:border-primary/60 focus:ring-primary/20 focus:outline-none resize-none"
-                                ></textarea>
-                                <p class="text-xs text-muted-foreground">
-                                    Optional description for additional context
-                                </p>
+                            <!-- Address Section -->
+                            <div class="space-y-4">
+                                <h5 class="text-sm font-medium text-foreground border-b border-border/30 pb-2">
+                                    Address Information
+                                </h5>
+
+                                <!-- Address Line 1 and 2 -->
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div class="space-y-2">
+                                        <Label :for="`address-line1-${index}`" class="text-sm font-medium">
+                                            Street Address *
+                                        </Label>
+                                        <Input
+                                            :id="`address-line1-${index}`"
+                                            v-model="building.address_line1"
+                                            placeholder="e.g. 123 Business Street"
+                                            :disabled="loading"
+                                            required
+                                            class="h-11 rounded-xl border-border/60 focus:border-primary/60"
+                                        />
+                                    </div>
+
+                                    <div class="space-y-2">
+                                        <Label :for="`address-line2-${index}`" class="text-sm font-medium">
+                                            Address Line 2 (Optional)
+                                        </Label>
+                                        <Input
+                                            :id="`address-line2-${index}`"
+                                            v-model="building.address_line2"
+                                            placeholder="e.g. Suite 100, Floor 2"
+                                            :disabled="loading"
+                                            class="h-11 rounded-xl border-border/60 focus:border-primary/60"
+                                        />
+                                    </div>
+                                </div>
+
+                                <!-- City and Country -->
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div class="space-y-2">
+                                        <Label :for="`city-${index}`" class="text-sm font-medium">
+                                            City *
+                                        </Label>
+                                        <Input
+                                            :id="`city-${index}`"
+                                            v-model="building.city"
+                                            placeholder="e.g. New York"
+                                            :disabled="loading"
+                                            required
+                                            class="h-11 rounded-xl border-border/60 focus:border-primary/60"
+                                        />
+                                    </div>
+
+                                    <div class="space-y-2">
+                                        <Label :for="`country-${index}`" class="text-sm font-medium">
+                                            Country *
+                                        </Label>
+                                        <Select 
+                                            :model-value="getCountrySelectValue(building)"
+                                            @update:model-value="setCountrySelectValue(building, $event)"
+                                            :disabled="loading"
+                                            required
+                                        >
+                                            <SelectTrigger class="h-11 rounded-xl border-border/60 focus:border-primary/60">
+                                                <SelectValue placeholder="Select Country" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem 
+                                                    v-for="country in countries" 
+                                                    :key="country.id" 
+                                                    :value="country.id.toString()"
+                                                >
+                                                    {{ country.name }}
+                                                </SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                </div>
+
+                                <!-- State and Postal Code -->
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div class="space-y-2">
+                                        <Label :for="`state-${index}`" class="text-sm font-medium">
+                                            State/Province (Optional)
+                                        </Label>
+                                        <Select 
+                                            :model-value="getStateSelectValue(building)"
+                                            @update:model-value="setStateSelectValue(building, $event)"
+                                            :disabled="loading || !getStatesForCountry(building.country_id).length"
+                                        >
+                                            <SelectTrigger class="h-11 rounded-xl border-border/60 focus:border-primary/60">
+                                                <SelectValue placeholder="Select State" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem 
+                                                    v-for="state in getStatesForCountry(building.country_id)" 
+                                                    :key="state.id" 
+                                                    :value="state.id.toString()"
+                                                >
+                                                    {{ state.name }}
+                                                </SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+
+                                    <div class="space-y-2">
+                                        <Label :for="`postal-code-${index}`" class="text-sm font-medium">
+                                            Postal Code (Optional)
+                                        </Label>
+                                        <Input
+                                            :id="`postal-code-${index}`"
+                                            v-model="building.postal_code"
+                                            placeholder="e.g. 10001"
+                                            :disabled="loading"
+                                            class="h-11 rounded-xl border-border/60 focus:border-primary/60"
+                                        />
+                                    </div>
+                                </div>
+
+                                <!-- Timezone -->
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div class="space-y-2">
+                                        <Label :for="`timezone-${index}`" class="text-sm font-medium">
+                                            Timezone (Optional)
+                                        </Label>
+                                        <Select 
+                                            v-model="building.timezone"
+                                            :disabled="loading"
+                                        >
+                                            <SelectTrigger class="h-11 rounded-xl border-border/60 focus:border-primary/60">
+                                                <SelectValue placeholder="Select Timezone" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="UTC">UTC (Coordinated Universal Time)</SelectItem>
+                                                <SelectItem value="America/New_York">Eastern Time (ET)</SelectItem>
+                                                <SelectItem value="America/Chicago">Central Time (CT)</SelectItem>
+                                                <SelectItem value="America/Denver">Mountain Time (MT)</SelectItem>
+                                                <SelectItem value="America/Los_Angeles">Pacific Time (PT)</SelectItem>
+                                                <SelectItem value="Europe/London">GMT (Greenwich Mean Time)</SelectItem>
+                                                <SelectItem value="Europe/Paris">CET (Central European Time)</SelectItem>
+                                                <SelectItem value="Asia/Tokyo">JST (Japan Standard Time)</SelectItem>
+                                                <SelectItem value="Australia/Sydney">AEDT (Australian Eastern Daylight Time)</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                </div>
                             </div>
                         </CardContent>
                     </Card>
@@ -189,8 +310,8 @@
                         <h3 class="font-semibold text-foreground mb-2">Tips for Adding Buildings</h3>
                         <div class="space-y-2 text-sm text-muted-foreground">
                             <p>• Use clear, descriptive names that your team will recognize</p>
-                            <p>• Include complete addresses for accurate location identification</p>
-                            <p>• Add descriptions to provide additional context about each building</p>
+                            <p>• Provide complete address information for accurate location identification</p>
+                            <p>• Select the appropriate timezone for each building location</p>
                             <p>• You can always add more buildings later from your dashboard</p>
                         </div>
                     </div>
@@ -201,12 +322,13 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useForm } from '@inertiajs/vue3'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import {
     Building2,
     Plus,
@@ -217,7 +339,7 @@ import {
     AlertCircle
 } from 'lucide-vue-next'
 
-import type { OnboardingBuilding } from '@/types'
+import type { OnboardingBuilding, Country, State } from '@/types'
 
 // Emits
 const emit = defineEmits<{
@@ -229,16 +351,30 @@ const emit = defineEmits<{
 interface Props {
     loading?: boolean
     existingBuildings?: OnboardingBuilding[]
+    countries?: Country[]
+    states?: State[]
 }
 
 const props = withDefaults(defineProps<Props>(), {
     loading: false,
-    existingBuildings: () => []
+    existingBuildings: () => [],
+    countries: () => [],
+    states: () => []
 })
 
 // Reactive state
 const buildings = ref<OnboardingBuilding[]>([
-    { name: '', address: '', description: '' }
+    { 
+        name: '', 
+        description: '',
+        address_line1: '', 
+        address_line2: '',
+        city: '', 
+        state_id: undefined,
+        country_id: 1, // Default to first country (US)
+        postal_code: '',
+        timezone: 'UTC'
+    }
 ])
 
 // Form setup
@@ -251,16 +387,53 @@ const isFormValid = computed(() => {
     return buildings.value.length > 0 && 
            buildings.value.every(building => 
                building.name.trim() !== '' && 
-               building.address.trim() !== ''
+               building.address_line1.trim() !== '' &&
+               building.city.trim() !== '' &&
+               building.country_id > 0
            )
 })
 
 const loading = computed(() => props.loading || form.processing)
 
+// Helper functions for Select component v-model conversion
+const getCountrySelectValue = (building: OnboardingBuilding) => {
+    return building.country_id?.toString() || ''
+}
+
+const setCountrySelectValue = (building: OnboardingBuilding, value: string | number | boolean | null | undefined) => {
+    if (value && (typeof value === 'string' || typeof value === 'number')) {
+        building.country_id = typeof value === 'string' ? parseInt(value) : value
+    } else {
+        building.country_id = 1
+    }
+}
+
+const getStateSelectValue = (building: OnboardingBuilding) => {
+    return building.state_id?.toString() || ''
+}
+
+const setStateSelectValue = (building: OnboardingBuilding, value: string | number | boolean | null | undefined) => {
+    if (value && (typeof value === 'string' || typeof value === 'number')) {
+        building.state_id = typeof value === 'string' ? parseInt(value) : value
+    } else {
+        building.state_id = undefined
+    }
+}
+
 // Methods
 const addBuilding = () => {
     if (buildings.value.length < 10) {
-        buildings.value.push({ name: '', address: '', description: '' })
+        buildings.value.push({ 
+            name: '', 
+            description: '',
+            address_line1: '', 
+            address_line2: '',
+            city: '', 
+            state_id: undefined,
+            country_id: 1, // Default to first country
+            postal_code: '',
+            timezone: 'UTC'
+        })
         form.buildings = buildings.value
     }
 }
@@ -270,6 +443,11 @@ const removeBuilding = (index: number) => {
         buildings.value.splice(index, 1)
         form.buildings = buildings.value
     }
+}
+
+const getStatesForCountry = (countryId: number | null): State[] => {
+    if (!countryId) return []
+    return props.states.filter(state => state.country_id === countryId)
 }
 
 const submit = () => {
@@ -285,6 +463,22 @@ const submit = () => {
         }
     })
 }
+
+// Watch for country changes to reset state selection
+watch(buildings, (newBuildings) => {
+    newBuildings.forEach((building) => {
+        if (building.state_id && !getStatesForCountry(building.country_id).some(state => state.id === building.state_id)) {
+            building.state_id = undefined
+        }
+    })
+}, { deep: true })
+
+// Debug: Log props
+console.log('BuildingsStep props:', {
+    countries: props.countries,
+    states: props.states,
+    existingBuildings: props.existingBuildings
+})
 
 // Initialize with existing data if provided
 if (props.existingBuildings && props.existingBuildings.length > 0) {

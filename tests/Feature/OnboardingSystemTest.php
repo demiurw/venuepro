@@ -51,6 +51,9 @@ class OnboardingSystemTest extends TestCase
     /** @test */
     public function onboarding_service_detects_incomplete_onboarding_correctly()
     {
+        // Initially, user should have onboarding_step_completed = 0
+        $this->assertEquals(0, $this->systemAdmin->fresh()->onboarding_step_completed);
+        
         $isComplete = $this->onboardingService->isOnboardingComplete($this->company->id);
         $this->assertFalse($isComplete);
 
@@ -60,6 +63,9 @@ class OnboardingSystemTest extends TestCase
         $this->assertFalse($progress['rooms']);
         $this->assertFalse($progress['groups']);
         $this->assertFalse($progress['users']);
+        $this->assertFalse($progress['labels']);
+        $this->assertEquals(0, $progress['current_step']);
+        $this->assertEquals(1, $progress['next_step']);
     }
 
     /** @test */
@@ -81,15 +87,19 @@ class OnboardingSystemTest extends TestCase
         $this->assertTrue($result['success']);
         $this->assertEquals(2, count($result['data']));
         
-        $this->assertDatabaseHas('building', [
+        // Check that buildings were created
+        $this->assertDatabaseHas('buildings', [
             'name' => 'Main Building',
             'company_id' => $this->company->id,
         ]);
         
-        $this->assertDatabaseHas('building', [
+        $this->assertDatabaseHas('buildings', [
             'name' => 'Annex Building',
             'company_id' => $this->company->id,
         ]);
+        
+        // Check that user's onboarding step was updated
+        $this->assertEquals(1, $this->systemAdmin->fresh()->onboarding_step_completed);
     }
 
     /** @test */
@@ -140,8 +150,7 @@ class OnboardingSystemTest extends TestCase
             [
                 'name' => 'Conference Room A',
                 'building_id' => $building->id,
-                'capacity' => 10,
-                'type' => 'conference'
+                'capacity' => 10
             ]
         ];
 
@@ -155,8 +164,9 @@ class OnboardingSystemTest extends TestCase
         // Check that access control was created
         $this->assertDatabaseHas('access_control', [
             'group_id' => $group->id,
-            'resource_id' => $room->id,
-            'resource_type' => Room::class,
+            'entity_id' => $room->id,
+            'entity_type' => 'room',
+            'access_level' => 'book',
             'company_id' => $this->company->id,
         ]);
     }
@@ -217,7 +227,6 @@ class OnboardingSystemTest extends TestCase
             'name' => 'Test Room',
             'building_id' => $building->id,
             'capacity' => 10,
-            'type' => 'conference',
             'company_id' => $this->company->id,
         ]);
 
@@ -236,7 +245,6 @@ class OnboardingSystemTest extends TestCase
             'user_type' => 'booking_agent',
             'company_id' => $this->company->id,
             'group_id' => $group->id,
-            'role_id' => 4,
             'status' => UserStatus::PENDING,
             'auth_method' => 'otp',
         ]);
@@ -269,16 +277,169 @@ class OnboardingSystemTest extends TestCase
     /** @test */
     public function system_admin_redirected_from_dashboard_when_onboarding_incomplete()
     {
-        // Mock the middleware logic - this would normally be tested with browser tests
-        $progress = $this->onboardingService->getOnboardingProgress($this->company->id);
-        
-        $this->assertFalse($progress['buildings']);
-        $this->assertFalse($progress['rooms']);
-        $this->assertFalse($progress['groups']);
-        $this->assertFalse($progress['users']);
-        
-        // When onboarding is incomplete, system admin should be redirected
+        $response = $this->actingAs($this->systemAdmin)
+            ->get('/admin/dashboard');
+
+        // Should be redirected to onboarding buildings step
+        $response->assertRedirect('/onboarding/buildings');
+    }
+
+    /** @test */
+    public function complete_onboarding_flow_updates_steps_correctly()
+    {
+        // Step 1: Create Buildings
+        $buildingsData = [
+            [
+                'name' => 'Main Office',
+                'address' => '123 Business Ave, City, State 12345',
+                'description' => 'Main company office building'
+            ]
+        ];
+
+        $response = $this->actingAs($this->systemAdmin)
+            ->post('/onboarding/buildings', ['buildings' => $buildingsData]);
+
+        $response->assertRedirect('/onboarding/rooms');
+        $this->assertEquals(1, $this->systemAdmin->fresh()->onboarding_step_completed);
+
+        // Step 2: Create Rooms
+        $building = $this->company->buildings()->first();
+        $roomsData = [
+            [
+                'name' => 'Conference Room A',
+                'building_id' => $building->id,
+                'capacity' => 12,
+                    'description' => 'Large conference room with projector',
+                'equipment' => 'Projector, Whiteboard, Video Conferencing'
+            ]
+        ];
+
+        $response = $this->actingAs($this->systemAdmin)
+            ->post('/onboarding/rooms', ['rooms' => $roomsData]);
+
+        $response->assertRedirect('/onboarding/groups');
+        $this->assertEquals(2, $this->systemAdmin->fresh()->onboarding_step_completed);
+
+        // Step 3: Create Groups
+        $groupsData = [
+            [
+                'name' => 'Engineering Team',
+                'description' => 'Software development and engineering team'
+            ]
+        ];
+
+        $response = $this->actingAs($this->systemAdmin)
+            ->post('/onboarding/groups', ['groups' => $groupsData]);
+
+        $response->assertRedirect('/onboarding/users');
+        $this->assertEquals(3, $this->systemAdmin->fresh()->onboarding_step_completed);
+
+        // Step 4: Create Users
+        $group = $this->company->groups()->first();
+        $usersData = [
+            [
+                'first_name' => 'John',
+                'last_name' => 'Doe',
+                'email' => 'john.doe@testcompany.com',
+                'user_type' => 'booking_agent',
+                'group_id' => $group->id
+            ]
+        ];
+
+        $response = $this->actingAs($this->systemAdmin)
+            ->post('/onboarding/users', ['users' => $usersData]);
+
+        $response->assertRedirect('/onboarding/labels');
+        $this->assertEquals(4, $this->systemAdmin->fresh()->onboarding_step_completed);
+
+        // Step 5: Save Labels (Final Step)
+        $labelsData = [
+            [
+                'name' => 'Team Meeting',
+                'color' => '#3B82F6',
+                'description' => 'Regular team meetings and standups'
+            ],
+            [
+                'name' => 'Client Meeting',
+                'color' => '#EF4444',
+                'description' => 'Client presentations and consultations'
+            ]
+        ];
+
+        $response = $this->actingAs($this->systemAdmin)
+            ->post('/onboarding/labels', ['labels' => $labelsData]);
+
+        $response->assertRedirect('/admin/dashboard');
+        $this->assertEquals(5, $this->systemAdmin->fresh()->onboarding_step_completed);
+
+        // Verify onboarding is now complete
         $isComplete = $this->onboardingService->isOnboardingComplete($this->company->id);
-        $this->assertFalse($isComplete);
+        $this->assertTrue($isComplete);
+
+        // Verify company has custom labels
+        $this->assertNotNull($this->company->fresh()->custom_labels);
+        $this->assertCount(2, $this->company->fresh()->custom_labels);
+
+        // System admin should now be able to access dashboard
+        $response = $this->actingAs($this->systemAdmin)
+            ->get('/admin/dashboard');
+
+        $response->assertStatus(200);
+    }
+
+    /** @test */
+    public function onboarding_middleware_redirects_based_on_current_step()
+    {
+        // Step 0 (no steps completed) - redirect to buildings
+        $response = $this->actingAs($this->systemAdmin)
+            ->get('/admin/dashboard');
+        $response->assertRedirect('/onboarding/buildings');
+
+        // Complete step 1 (buildings)
+        $this->systemAdmin->update(['onboarding_step_completed' => 1]);
+        $response = $this->actingAs($this->systemAdmin)
+            ->get('/admin/dashboard');
+        $response->assertRedirect('/onboarding/rooms');
+
+        // Complete step 2 (rooms)
+        $this->systemAdmin->update(['onboarding_step_completed' => 2]);
+        $response = $this->actingAs($this->systemAdmin)
+            ->get('/admin/dashboard');
+        $response->assertRedirect('/onboarding/groups');
+
+        // Complete step 3 (groups)
+        $this->systemAdmin->update(['onboarding_step_completed' => 3]);
+        $response = $this->actingAs($this->systemAdmin)
+            ->get('/admin/dashboard');
+        $response->assertRedirect('/onboarding/users');
+
+        // Complete step 4 (users)
+        $this->systemAdmin->update(['onboarding_step_completed' => 4]);
+        $response = $this->actingAs($this->systemAdmin)
+            ->get('/admin/dashboard');
+        $response->assertRedirect('/onboarding/labels');
+
+        // Complete all steps (step 5)
+        $this->systemAdmin->update(['onboarding_step_completed' => 5]);
+        $response = $this->actingAs($this->systemAdmin)
+            ->get('/admin/dashboard');
+        $response->assertStatus(200); // Should allow access
+    }
+
+    /** @test */
+    public function onboarding_skip_functionality_works()
+    {
+        // Test skipping buildings step
+        $response = $this->actingAs($this->systemAdmin)
+            ->post('/onboarding/skip/buildings');
+
+        $response->assertRedirect('/onboarding/rooms');
+
+        // Test skipping with incomplete prerequisites fails
+        $response = $this->actingAs($this->systemAdmin)
+            ->post('/onboarding/skip/users');
+
+        $response->assertRedirect('/onboarding/buildings')
+            ->assertSessionHas('error');
     }
 }

@@ -8,6 +8,9 @@ use App\Http\Requests\Onboarding\CreateGroupsRequest;
 use App\Http\Requests\Onboarding\CreateUsersRequest;
 use App\Http\Requests\Onboarding\SaveLabelsRequest;
 use App\Services\OnboardingService;
+use App\Services\CompanyService;
+use App\Models\Country;
+use App\Models\State;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -17,10 +20,12 @@ use Inertia\Response;
 class OnboardingController extends Controller
 {
     protected OnboardingService $onboardingService;
+    protected CompanyService $companyService;
 
-    public function __construct(OnboardingService $onboardingService)
+    public function __construct(OnboardingService $onboardingService, CompanyService $companyService)
     {
         $this->onboardingService = $onboardingService;
+        $this->companyService = $companyService;
         
         // Ensure only System Admins can access onboarding
         $this->middleware(function ($request, $next) {
@@ -40,10 +45,15 @@ class OnboardingController extends Controller
         $user = Auth::user();
         $progress = $this->onboardingService->getOnboardingProgress($user->company_id);
 
-        return Inertia::render('Onboarding/Buildings', [
+        // Get countries and states for address selection
+        $countries = Country::active()->orderBy('name')->get(['id', 'code', 'name']);
+        $states = State::active()->with('country:id,code')->orderBy('name')->get(['id', 'name', 'code', 'country_id']);
+
+        return Inertia::render('Onboarding/Index', [
             'progress' => $progress,
-            'currentStep' => 'buildings',
-            'nextStep' => 'rooms',
+            'currentStep' => 1,
+            'countries' => $countries,
+            'states' => $states,
         ]);
     }
 
@@ -68,7 +78,7 @@ class OnboardingController extends Controller
     /**
      * Show the rooms onboarding step
      */
-    public function rooms(Request $request): Response
+    public function rooms(Request $request): Response|RedirectResponse
     {
         $user = Auth::user();
         $progress = $this->onboardingService->getOnboardingProgress($user->company_id);
@@ -81,11 +91,9 @@ class OnboardingController extends Controller
 
         $buildings = $this->onboardingService->getAvailableBuildings($user->company_id);
 
-        return Inertia::render('Onboarding/Rooms', [
+        return Inertia::render('Onboarding/Index', [
             'progress' => $progress,
-            'currentStep' => 'rooms',
-            'nextStep' => 'groups',
-            'previousStep' => 'buildings',
+            'currentStep' => 2,
             'buildings' => $buildings,
         ]);
     }
@@ -111,7 +119,7 @@ class OnboardingController extends Controller
     /**
      * Show the groups onboarding step
      */
-    public function groups(Request $request): Response
+    public function groups(Request $request): Response|RedirectResponse
     {
         $user = Auth::user();
         $progress = $this->onboardingService->getOnboardingProgress($user->company_id);
@@ -122,11 +130,9 @@ class OnboardingController extends Controller
                 ->with('error', 'Please complete the previous steps first.');
         }
 
-        return Inertia::render('Onboarding/Groups', [
+        return Inertia::render('Onboarding/Index', [
             'progress' => $progress,
-            'currentStep' => 'groups',
-            'nextStep' => 'users',
-            'previousStep' => 'rooms',
+            'currentStep' => 3,
         ]);
     }
 
@@ -151,7 +157,7 @@ class OnboardingController extends Controller
     /**
      * Show the users onboarding step
      */
-    public function users(Request $request): Response
+    public function users(Request $request): Response|RedirectResponse
     {
         $user = Auth::user();
         $progress = $this->onboardingService->getOnboardingProgress($user->company_id);
@@ -163,21 +169,11 @@ class OnboardingController extends Controller
         }
 
         $groups = $this->onboardingService->getAvailableGroups($user->company_id);
-        $allowedRoles = ['booking_agent', 'hod', 'invitee'];
-        $roleRequirements = [
-            'booking_agent' => ['group_required' => true],
-            'hod' => ['group_required' => true],
-            'invitee' => ['group_required' => false],
-        ];
 
-        return Inertia::render('Onboarding/Users', [
+        return Inertia::render('Onboarding/Index', [
             'progress' => $progress,
-            'currentStep' => 'users',
-            'nextStep' => 'labels',
-            'previousStep' => 'groups',
+            'currentStep' => 4,
             'groups' => $groups,
-            'allowedRoles' => $allowedRoles,
-            'roleRequirements' => $roleRequirements,
         ]);
     }
 
@@ -202,7 +198,7 @@ class OnboardingController extends Controller
     /**
      * Show the labels onboarding step (final step)
      */
-    public function labels(Request $request): Response
+    public function labels(Request $request): Response|RedirectResponse
     {
         $user = Auth::user();
         $progress = $this->onboardingService->getOnboardingProgress($user->company_id);
@@ -213,21 +209,9 @@ class OnboardingController extends Controller
                 ->with('error', 'Please complete the previous steps first.');
         }
 
-        $labelTypes = [
-            'department' => 'Department',
-            'division' => 'Division',
-            'team' => 'Team',
-            'category' => 'Category',
-            'location' => 'Location',
-            'custom' => 'Custom',
-        ];
-
-        return Inertia::render('Onboarding/Labels', [
+        return Inertia::render('Onboarding/Index', [
             'progress' => $progress,
-            'currentStep' => 'labels',
-            'previousStep' => 'users',
-            'labelTypes' => $labelTypes,
-            'isLastStep' => true,
+            'currentStep' => 5,
         ]);
     }
 

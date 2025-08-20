@@ -148,16 +148,36 @@ export interface OnboardingProgress {
 
 export interface OnboardingBuilding {
     name: string;
-    address: string;
     description?: string;
+    address_line1: string;
+    address_line2?: string;
+    city: string;
+    state_id?: number;
+    country_id: number;
+    postal_code?: string;
+    timezone?: string;
+}
+
+export interface Country {
+    id: number;
+    code: string;
+    name: string;
+    phone_code?: string;
+    is_active: boolean;
+}
+
+export interface State {
+    id: number;
+    name: string;
+    code: string;
+    country_id: number;
+    is_active: boolean;
 }
 
 export interface OnboardingRoom {
     name: string;
     building_id?: number;
-    building_name?: string;
     capacity: number;
-    type: 'conference' | 'meeting' | 'training' | 'auditorium' | 'classroom' | 'other';
     description?: string;
     equipment?: string;
 }
@@ -172,13 +192,15 @@ export interface OnboardingUser {
     last_name: string;
     email: string;
     user_type: 'hod' | 'booking_agent' | 'invitee';
-    group_name?: string;
+    group_id?: number;
 }
 
 export interface OnboardingLabel {
     name: string;
     color: string;
     description?: string;
+    applicable_to: ('buildings' | 'rooms' | 'users' | 'groups')[];
+    is_active?: boolean;
 }
 
 export interface OnboardingStep {
@@ -189,4 +211,16 @@ export interface OnboardingStep {
     is_completed: boolean;
     is_current: boolean;
     is_accessible: boolean;
+}
+
+export interface AvailableBuilding {
+    id: number;
+    name: string;
+    address: string;
+}
+
+export interface AvailableGroup {
+    id: number;
+    name: string;
+    description?: string;
 }

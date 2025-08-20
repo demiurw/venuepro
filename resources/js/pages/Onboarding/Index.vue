@@ -157,7 +157,7 @@ import GroupsStep from './GroupsStep.vue'
 import UsersStep from './UsersStep.vue'
 import LabelsStep from './LabelsStep.vue'
 
-import type { OnboardingProgress } from '@/types'
+import type { OnboardingProgress, AvailableBuilding, AvailableGroup, Country, State } from '@/types'
 
 interface Props {
     progress?: OnboardingProgress
@@ -165,22 +165,26 @@ interface Props {
     // Props for different steps
     existingBuildings?: any[]
     existingRooms?: any[]
-    availableBuildings?: string[]
+    buildings?: AvailableBuilding[]
     existingGroups?: any[]
     existingUsers?: any[]
-    availableGroups?: string[]
+    groups?: AvailableGroup[]
     existingLabels?: any[]
+    countries?: Country[]
+    states?: State[]
 }
 
 const props = withDefaults(defineProps<Props>(), {
     currentStep: 1,
     existingBuildings: () => [],
     existingRooms: () => [],
-    availableBuildings: () => [],
+    buildings: () => [],
     existingGroups: () => [],
     existingUsers: () => [],
-    availableGroups: () => [],
-    existingLabels: () => []
+    groups: () => [],
+    existingLabels: () => [],
+    countries: () => [],
+    states: () => []
 })
 
 // Reactive state
@@ -232,7 +236,7 @@ const steps = [
     {
         id: 'labels',
         title: 'Labels',
-        description: 'Create booking categories and labels',
+        description: 'Create resource labels for organizing buildings, rooms, users, and groups',
         component: 'LabelsStep',
         icon: 'Tags',
         is_completed: false,
@@ -282,12 +286,14 @@ const getStepProps = () => {
     switch (stepId) {
         case 'buildings':
             return {
-                existingBuildings: props.existingBuildings
+                existingBuildings: props.existingBuildings,
+                countries: props.countries,
+                states: props.states
             }
         case 'rooms':
             return {
                 existingRooms: props.existingRooms,
-                availableBuildings: props.availableBuildings
+                availableBuildings: props.buildings
             }
         case 'groups':
             return {
@@ -296,7 +302,7 @@ const getStepProps = () => {
         case 'users':
             return {
                 existingUsers: props.existingUsers,
-                availableGroups: props.availableGroups
+                availableGroups: props.groups
             }
         case 'labels':
             return {
